@@ -75,6 +75,12 @@ Every parser in `src/parse/` assumes its input is the **fixed-width ASCII that
 cells split on 2+ spaces, columns are read by x-offset, and lines align by absolute
 column position. Keep this contract in mind when touching any parser.
 
+Headings are not always all caps in the text. A PDF can set them in a caps-only
+font but store mixed case (pdftotext: `Stone Sense`) or random case with wide
+gaps (pdf.js: `stOne   SenSe`). `src/parse/heading.ts` reads such lines by shape
+and normalises the name. The spell and trait parsers try all caps first and use
+it as the fallback.
+
 There are two producers of that fixed-width text, both feeding the _same_ parsers:
 
 - **CLI**: `src/pdf/extract.ts` shells out to `pdftotext` (poppler), cached locally by

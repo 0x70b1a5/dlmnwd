@@ -106,3 +106,73 @@ test("merges a spell name that wraps onto a second all-caps line", () => {
   expect(spells[0].duration).toBe("2d6 Rounds");
   expect(spells[0].body).toContain("Invented rune effect.");
 });
+
+// Some PDFs store the names of a caps-only font in mixed case (pdftotext) or in
+// random case with wide gaps (pdf.js). Invented entries.
+test("reads mixed-case and random-case names when the entry opens on the next line", () => {
+  const page = [
+    "Rank 2 Arcane Spells",
+    "Glyph of Testing",
+    "Duration: 1 Turn",
+    "Range: 10′",
+    "An invented glyph for testing.",
+    "",
+    "wArD  oF   the  teSter", // pdf.js: random case, wide gaps
+    "Duration: 2 Turns",
+    "Range: Self",
+    "An invented ward for testing.",
+    "",
+    "Speak With Pebbles",
+    "Prayer name: Grace of St Nobody",
+    "Duration: 1 Turn",
+    "Range: Touch",
+    "An invented chat with stones.",
+  ].join("\n");
+  const spells = parseSpells([page]);
+  expect(spells.map((s) => s.name)).toEqual([
+    "Glyph of Testing",
+    "Ward of the Tester",
+    "Speak with Pebbles",
+  ]);
+  expect(spells[1].body).toBe("An invented ward for testing.");
+  expect(spells[2].prayerName).toBe("Grace of St Nobody");
+});
+
+test("a mixed-case line is a name only if the entry opens directly below it", () => {
+  const page = [
+    "Rank 1 Arcane Spells",
+    "Test Bolt",
+    "Duration: Instant",
+    "Range: 60′",
+    "An invented bolt. The caster may also",
+    "Aim Twice", // prose fragment: no Duration line directly below
+    "at a second target.",
+    "Duration: The glow lasts a while.",
+  ].join("\n");
+  const spells = parseSpells([page]);
+  expect(spells.map((s) => s.name)).toEqual(["Test Bolt"]);
+  expect(spells[0].body).toContain("Aim Twice");
+});
+
+test("a section that does not open with a rank heading ends the spell run", () => {
+  const spellPage = [
+    "Rank 1 Arcane Spells",
+    "The most basic invented spells for testing.",
+    "Test Spark",
+    "Duration: 1 Round",
+    "Range: 10′",
+    "An invented spark.",
+  ].join("\n");
+  // Another section with the same entry layout (e.g. fairy tricks).
+  const otherPage = [
+    "Part Five | Magic",
+    "Fairy Tricks",
+    "The invented tricks of the test fairies, for testing.",
+    "Winkle",
+    "Duration: 1 Turn",
+    "Range: 30′",
+    "An invented trick, not a spell.",
+  ].join("\n");
+  const spells = parseSpells([spellPage, otherPage]);
+  expect(spells.map((s) => s.name)).toEqual(["Test Spark"]);
+});

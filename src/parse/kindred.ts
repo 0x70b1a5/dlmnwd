@@ -124,7 +124,7 @@ export function parseKindreds(pages: string[], rules: KindredRule[] = []): Parse
     if (namesPage < 0) continue;
     const { columns, rows } = parseNameTable(pages[namesPage], upper);
     const [from, to] = sectionSpan(starts, namesPage, pages.length);
-    const traits = extractTraits(pages, from, to);
+    const traits = extractTraits(pages, from, to, rule.name);
     out.push({
       id: rule.id,
       name: rule.name,

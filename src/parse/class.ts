@@ -90,7 +90,7 @@ export function parseClasses(pages: string[]): ParsedClass[] {
     const skills = parseSkills(pages, page, name);
     // A class occupies its stat-block page and the spread beside it; the next
     // class starts two pages on, so stop short of it.
-    const traits = extractTraits(pages, page, Math.min(pages.length, page + 2));
+    const traits = extractTraits(pages, page, Math.min(pages.length, page + 2), name);
     const startingEquipment = parseStartingEquipment(pages[page]);
     const spellBooks = name === "Magician" ? parseSpellBooks(pages, page) : [];
     out.push({

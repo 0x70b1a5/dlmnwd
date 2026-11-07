@@ -13,7 +13,7 @@ const DB_PATH = join(CACHE_DIR, "dw.db");
 
 // Bump when a parser starts producing new or reshaped data, so an index built by
 // an older version is rebuilt even though the PDF itself hasn't changed.
-export const INDEX_VERSION = 4;
+export const INDEX_VERSION = 5;
 
 export interface SearchHit {
   book: string;

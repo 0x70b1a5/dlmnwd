@@ -1,5 +1,6 @@
 import { reflowColumns } from "../pdf/columns.ts";
 import type { Spell } from "../schema.ts";
+import { headingText, headingName, isHeadingShape } from "./heading.ts";
 
 const RANK_HEADER = /Rank\s+(\d+)\s+(Arcane|Holy)\s+Spells/i;
 
@@ -8,41 +9,9 @@ const FLAVOR_STORY = /^\s*The miracle of\b/i;
 // A bare folio number or a running-header fragment left in a column by the reflow.
 const isFurniture = (line: string) => /^\d{1,3}$/.test(line.trim()) || line.includes("|");
 
-// Minor words stay lowercase in a title unless they lead it.
-const MINOR_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "as",
-  "at",
-  "by",
-  "for",
-  "from",
-  "in",
-  "of",
-  "on",
-  "or",
-  "the",
-  "to",
-  "with",
-]);
-
-/** Title-case an all-caps heading. */
-function titleCase(s: string): string {
-  return s
-    .toLowerCase()
-    .split(" ")
-    .map((w, i) =>
-      i > 0 && MINOR_WORDS.has(w)
-        ? w
-        : w.replace(/(^|-)([a-z])/g, (_, pre, c) => pre + c.toUpperCase()),
-    )
-    .join(" ");
-}
-
 // A spell name is a short all-caps line (letters, spaces, apostrophes, hyphens,
 // and the slash in dual spells like "IGNITE / EXTINGUISH").
-function asHeader(line: string): string | null {
+function capsHeader(line: string): string | null {
   const t = line.trim();
   if (t.length < 3 || t.length > 40) return null;
   if (!/^[A-Z][A-Z '’/-]+$/.test(t)) return null;
@@ -50,29 +19,62 @@ function asHeader(line: string): string | null {
   return t;
 }
 
+// A name in a caps-only font stored in mixed or random case (see heading.ts).
+function mixedHeader(line: string): string | null {
+  const t = headingText(line);
+  return isHeadingShape(t, 6, 40) && !/^(part|rank)\b/i.test(t) ? t : null;
+}
+
+// The first non-blank line after a mixed-case name must open the entry. A caps
+// name can wrap, and only needs a `Duration:` line within a few lines.
+const ENTRY_START = /^\s*(Duration|Prayer name):/;
+function nextLine(lines: string[], j: number): string {
+  while (j < lines.length && !lines[j].trim()) j++;
+  return lines[j] ?? "";
+}
+
 /** A header is a spell entry only if a `Duration:` line follows within a few lines. */
 function isSpellHeader(lines: string[], i: number): string | null {
-  const name = asHeader(lines[i]);
-  if (!name) return null;
-  return /Duration:/.test(lines.slice(i + 1, i + 5).join("\n")) ? name : null;
+  return spellHeaderAt(lines, i)?.name ?? null;
 }
 
 /**
  * If line i starts a spell entry, return its Title-Case name and the line where
- * the body begins. A name can wrap onto a second all-caps line before the
- * Duration line; the fragments merge into one name (not a bodiless phantom).
+ * the body begins. A caps name can wrap onto a second line before the Duration
+ * line; the fragments merge into one name (not a bodiless phantom).
  */
 function spellHeaderAt(lines: string[], i: number): { name: string; bodyStart: number } | null {
-  const first = asHeader(lines[i]);
-  if (!first) return null;
-  const parts = [first];
-  let j = i + 1;
-  while (j < lines.length && asHeader(lines[j]) && !/Duration:/.test(lines[j])) {
-    parts.push(asHeader(lines[j]) as string);
+  // A mixed-case name is one line, and the entry opens on the next line.
+  const mixed = mixedHeader(lines[i]);
+  if (!capsHeader(lines[i])) {
+    if (!mixed || !ENTRY_START.test(nextLine(lines, i + 1))) return null;
+    return { name: headingName(mixed), bodyStart: i + 1 };
+  }
+  const parts: string[] = [];
+  let j = i;
+  while (j < lines.length && capsHeader(lines[j]) && !/Duration:/.test(lines[j])) {
+    parts.push(capsHeader(lines[j]) as string);
     j++;
   }
   if (!/Duration:/.test(lines.slice(j, j + 4).join("\n"))) return null;
-  return { name: titleCase(parts.join(" ")), bodyStart: j };
+  return { name: headingName(parts.join(" ")), bodyStart: j };
+}
+
+/**
+ * The heading of a page that opens a section: a short title, then a one-line
+ * tagline sentence, at the top of the page (below the running header).
+ */
+function sectionOpener(page: string): string | null {
+  const top = page
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.includes("|"))
+    .slice(0, 2);
+  if (top.length < 2) return null;
+  const [title, tagline] = top;
+  if (title.length > 40 || /\s{2,}/.test(title) || /[.:]$/.test(title)) return null;
+  if (tagline.length < 20 || /\s{2,}/.test(tagline) || !tagline.endsWith(".")) return null;
+  return title;
 }
 
 /**
@@ -85,15 +87,27 @@ export function parseSpells(pages: string[]): Spell[] {
   let rank: number | undefined;
   let tradition: Spell["tradition"];
 
+  // Other sections (e.g. glamours) use the same entry layout. A section that
+  // doesn't open with a rank heading stops the run until the next rank heading.
+  let inSpells = true;
+
   for (let p = 0; p < pages.length; p++) {
+    const opener = sectionOpener(pages[p]);
+    if (opener && !RANK_HEADER.test(opener)) {
+      inSpells = false;
+      rank = undefined;
+      tradition = undefined;
+    }
     const lines = reflowColumns(pages[p]).split("\n");
     for (let i = 0; i < lines.length; i++) {
       const rh = lines[i].match(RANK_HEADER);
       if (rh) {
         rank = parseInt(rh[1], 10);
         tradition = rh[2] as Spell["tradition"];
+        inSpells = true;
         continue;
       }
+      if (!inSpells) continue;
       const hdr = spellHeaderAt(lines, i);
       if (hdr) {
         spells.push(collect(lines, hdr.bodyStart, hdr.name, rank, tradition, p + 1));

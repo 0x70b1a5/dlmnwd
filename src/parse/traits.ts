@@ -1,4 +1,5 @@
 import { splitProseColumns } from "../pdf/columns.ts";
+import { headingText, headingName, isHeadingShape } from "./heading.ts";
 
 export interface Trait {
   name: string;
@@ -144,6 +145,21 @@ function looksLikeHeading(t: string): boolean {
   return HEADER.test(t);
 }
 
+// A heading in a caps-only font, stored in mixed or random case (see
+// heading.ts): a short line of words that follows a break (a blank line, a
+// finished sentence, or the column start) and opens a body line that starts
+// with a capital. A table header row fails that: a row of numbers follows it.
+function looksLikeMixedHeading(t: string, prev: string, next: string): boolean {
+  if (!isHeadingShape(headingText(t), 4, 34)) return false;
+  if (prev && !/[.!?:][’”"')]?$/.test(prev)) return false;
+  return /^[A-Z▶►◆•·‣]/.test(next);
+}
+
+// The section that ends a kindred's lore and comes before its traits.
+function isChoosing(t: string): boolean {
+  return /^Choosing\b/i.test(t) && t.replace(/\s+/g, " ").length <= 34;
+}
+
 function titleCase(s: string): string {
   return s
     .split(/\s+/)
@@ -210,44 +226,73 @@ function reflowBody(raw: string[]): string {
  * heading the column split scatters, may be truncated or missed — but the reset
  * keeps unrelated prose, running headers, and tables from merging in, and nothing
  * is fabricated.
+ *
+ * If the all-caps scan finds no trait, the book stores its headings in mixed
+ * case; the scan runs again and reads short lines of words at a break as
+ * headings. Mixed-case lore headings look the same as trait headings, so when
+ * the span has a "Choosing …" section, that scan starts after it. `title` is the
+ * section's own name (a class or kindred title line), which is not a trait.
  */
-export function extractTraits(pages: string[], from: number, to: number): Trait[] {
+export function extractTraits(pages: string[], from: number, to: number, title = ""): Trait[] {
+  const columns: string[] = [];
+  for (let p = Math.max(0, from); p < to && p < pages.length; p++)
+    columns.push(...splitProseColumns(pages[p]));
+  const caps = scanTraits(columns, false);
+  if (caps.length > 0) return caps;
+  const own = title.toLowerCase();
+  return scanTraits(columns, true).filter((t) => t.name.toLowerCase() !== own);
+}
+
+// A run of numbers and spaces: a table swept into a mixed-case trait body.
+const NUMBER_RUN = /(?:\d+ ){8,}/;
+
+function scanTraits(columns: string[], mixed: boolean): Trait[] {
   const traits: Trait[] = [];
   const seen = new Set<string>();
-  for (let p = Math.max(0, from); p < to && p < pages.length; p++) {
-    for (const col of splitProseColumns(pages[p])) {
-      let name: string | null = null;
-      let lines: string[] = [];
-      const flush = () => {
-        if (name !== null) {
-          // Reflow the body, then drop a trailing page-number footer the column
-          // scan swept in.
-          const text = reflowBody(lines)
-            .replace(/\s+\d{1,3}$/, "")
-            .trim();
-          if (text && !DICE_TABLE.test(text) && !seen.has(name)) {
-            seen.add(name);
-            traits.push({ name, text });
-          }
-        }
-        name = null;
-        lines = [];
-      };
-      for (const raw of col.split("\n")) {
-        const t = raw.replace(/­/g, "").trim(); // drop soft hyphens
-        if (looksLikeHeading(t)) {
-          // Any heading closes the current trait; a section/table title just ends
-          // the run, so its prose never bleeds into the previous trait.
-          flush();
-          if (!NOT_A_TRAIT.test(t)) name = titleCase(t);
-        } else if (name !== null) {
-          // Keep blank lines (as "") — reflowBody uses them to spot sub-headings.
-          // Collapse the emulator's wide inter-glyph gaps to single spaces.
-          lines.push(t.replace(/\s{2,}/g, " "));
+  // In mixed mode, skip the columns (and lines) before the "Choosing …" heading.
+  let skip = mixed && columns.some((c) => c.split("\n").some((l) => isChoosing(l.trim())));
+  for (const col of columns) {
+    let name: string | null = null;
+    let lines: string[] = [];
+    const flush = () => {
+      if (name !== null) {
+        // Reflow the body, then drop a trailing page-number footer the column
+        // scan swept in.
+        const text = reflowBody(lines)
+          .replace(/\s+\d{1,3}$/, "")
+          .trim();
+        const table = DICE_TABLE.test(text) || (mixed && NUMBER_RUN.test(text));
+        if (text && !table && !seen.has(name)) {
+          seen.add(name);
+          traits.push({ name, text });
         }
       }
-      flush();
+      name = null;
+      lines = [];
+    };
+    const rows = col.split("\n").map((raw) => raw.replace(/\u00ad/g, "").trim()); // drop soft hyphens
+    for (let i = 0; i < rows.length; i++) {
+      const t = rows[i];
+      if (skip) {
+        if (isChoosing(t)) skip = false;
+        continue;
+      }
+      const prev = rows[i - 1] ?? ""; // blank: a break
+      const next = rows.slice(i + 1).find(Boolean) ?? "";
+      const mixedHeading = mixed && looksLikeMixedHeading(t, prev, next);
+      if (looksLikeHeading(t) || mixedHeading || (mixed && isChoosing(t))) {
+        // Any heading closes the current trait; a section/table title just ends
+        // the run, so its prose never bleeds into the previous trait.
+        flush();
+        if (!NOT_A_TRAIT.test(t.toUpperCase()))
+          name = HEADER.test(t) ? titleCase(t) : headingName(headingText(t));
+      } else if (name !== null) {
+        // Keep blank lines (as "") — reflowBody uses them to spot sub-headings.
+        // Collapse the emulator's wide inter-glyph gaps to single spaces.
+        lines.push(t.replace(/\s{2,}/g, " "));
+      }
     }
+    flush();
   }
   return traits;
 }
