@@ -61,3 +61,23 @@ test("parses details only for names in the table, keyed lowercase", () => {
   // The rune-named entry is not in the glamour table, so it is not captured.
   expect(details.has("arcane unbinding")).toBe(false);
 });
+
+test("reads glamour headings stored in mixed or random case", () => {
+  // A caps-only font: pdftotext gives "Owlsight", pdf.js can give "oWlSiGht".
+  const page = [
+    "Owlsight",
+    "Duration: 1 Turn",
+    "Range: The caster",
+    "An invented sight for testing.",
+    "Short wrapped line",
+    "",
+    "dEwStEp",
+    "Duration: Instant",
+    "Range: 10′",
+    "An invented step for testing.",
+  ].join("\n");
+  const details = parseGlamourDetails([tablePage, page]);
+  expect(details.get("owlsight")?.body).toBe("An invented sight for testing. Short wrapped line");
+  expect(details.get("dewstep")).toMatchObject({ name: "Dewstep", duration: "Instant" });
+  expect(details.get("owlsight")?.range).toBe("The caster");
+});

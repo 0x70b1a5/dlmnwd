@@ -2,6 +2,8 @@
 // run unchanged in the browser (the layout-emulated character canvas has the
 // same shape as pdftotext -layout output these were written for).
 
+const ink = (c: string | undefined): boolean => c !== undefined && c !== " ";
+
 /**
  * Reflow a two-column page into single-column reading order (left column, then
  * right). Detects the whitespace gutter in the central band of the page; pages
@@ -30,10 +32,13 @@ export function reflowColumns(page: string): string {
   }
   if (gutter < 0) return page; // single column
 
-  // gutter column itself is blank, so drop it: left keeps [0, gutter), right [gutter+1, ).
-  const left = lines.map((l) => l.slice(0, gutter).replace(/\s+$/, "")).join("\n");
-  const right = lines.map((l) => l.slice(gutter + 1)).join("\n");
-  return `${left}\n${right}`;
+  // The gutter column is blank, so drop it: left keeps [0, gutter), right
+  // [gutter+1, ). A line whose text crosses the gutter (a running header, a
+  // full-width sentence) stays whole on the left, so no word is cut in two.
+  const crosses = (l: string) => ink(l[gutter]) || (ink(l[gutter - 1]) && ink(l[gutter + 1]));
+  const left = lines.map((l) => (crosses(l) ? l : l.slice(0, gutter)).replace(/\s+$/, ""));
+  const right = lines.map((l) => (crosses(l) ? "" : l.slice(gutter + 1)));
+  return `${left.join("\n")}\n${right.join("\n")}`;
 }
 
 /**
@@ -141,8 +146,6 @@ function cutAtGutter(line: string, gutter: number): [string, string] {
   if (!best || bestDist > 20) return [line.replace(/\s+$/, ""), ""];
   return [line.slice(0, best.start), line.slice(best.end)];
 }
-
-const ink = (c: string | undefined) => c !== undefined && c !== " ";
 
 /**
  * Split a page into exactly two columns at the single best central gutter.

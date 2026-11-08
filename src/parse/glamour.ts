@@ -1,11 +1,12 @@
 // Parse the d20 glamours table and the glamour descriptions from the Player's
 // Book. The d20 table sits in the enchanter/kindred creation pages; the
 // descriptions live in the Fairy Magic chapter (a two-column "Glamours" spread)
-// with the same shape as spell entries: an ALL-CAPS heading, Duration/Range
+// with the same shape as spell entries: a heading, Duration/Range
 // lines, then body prose. Pure (no Node APIs) so it runs unchanged in the
 // browser build.
 
 import { reflowColumns } from "../pdf/columns.ts";
+import { headingName, headingText, isHeadingShape } from "./heading.ts";
 
 export interface GlamourEntry {
   name: string;
@@ -52,42 +53,26 @@ export function parseGlamoursTable(pages: string[]): string[] {
   return [];
 }
 
-const MINOR_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "as",
-  "at",
-  "by",
-  "for",
-  "from",
-  "in",
-  "of",
-  "on",
-  "or",
-  "the",
-  "to",
-  "with",
-]);
-
-function titleCase(s: string): string {
-  return s
-    .toLowerCase()
-    .split(" ")
-    .map((w, i) => (i > 0 && MINOR_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
-    .join(" ");
+/** A glamour heading: a short line of words, in any case. pdftotext gives the
+ *  book's caps-only headings in mixed case, pdf.js sometimes in random case
+ *  with wide gaps (see heading.ts). Returns the line as a heading, or null. */
+function asGlamourHeading(line: string): string | null {
+  const t = headingText(line);
+  return isHeadingShape(t, 5, 30) ? t : null;
 }
 
-/** A glamour heading is a short ALL-CAPS line (letters, spaces, apostrophes). */
-function asGlamourHeading(line: string): string | null {
-  const t = line.trim();
-  if (t.length < 3 || t.length > 30) return null;
-  if (!/^[A-Z][A-Z '’-]+$/.test(t)) return null;
-  return t;
+/** True when the first non-blank line after `i` is a Duration: line. Only the
+ *  line right under a heading counts, so a short line of prose can't pass. */
+function durationFollows(lines: string[], i: number): boolean {
+  for (let j = i + 1; j < lines.length && j <= i + 2; j++) {
+    const t = lines[j].trim();
+    if (t) return t.startsWith("Duration:");
+  }
+  return false;
 }
 
 /**
- * Parse glamour descriptions: each is an ALL-CAPS heading followed by Duration:
+ * Parse glamour descriptions: each is a heading followed by Duration:
  * and Range: lines, then body prose, two-column like spell entries (so pages are
  * reflowed the same way). Only entries named in the glamour table are kept, which
  * bounds the scan to real glamours without matching on chapter prose. Returns a
@@ -109,10 +94,10 @@ export function parseGlamourDetails(
     for (let i = 0; i < lines.length; i++) {
       const heading = asGlamourHeading(lines[i]);
       if (!heading) continue;
-      // A heading is a glamour only if a Duration: line follows within a few.
-      if (!/Duration:/.test(lines.slice(i + 1, i + 5).join("\n"))) continue;
+      // A heading is a glamour only if a Duration: line follows it.
+      if (!durationFollows(lines, i)) continue;
 
-      const name = titleCase(heading);
+      const name = headingName(heading);
       if (!tableNames.has(name.toLowerCase())) continue; // real glamours only
       if (glamours.has(name.toLowerCase())) continue; // keep the first (full) entry
 
@@ -122,7 +107,7 @@ export function parseGlamourDetails(
 
       for (let j = i + 1; j < lines.length; j++) {
         const next = asGlamourHeading(lines[j]);
-        if (next && /Duration:/.test(lines.slice(j + 1, j + 5).join("\n"))) break; // next glamour
+        if (next && durationFollows(lines, j)) break; // next glamour
         const t = lines[j].trim();
         const dm = t.match(/^Duration:\s*(.+?)\s*$/);
         const rm = t.match(/^Range:\s*(.+?)\s*$/);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { splitProseColumns, splitTwoColumns } from "../src/pdf/columns.ts";
+import { reflowColumns, splitProseColumns, splitTwoColumns } from "../src/pdf/columns.ts";
 
 // Place text at fixed column offsets to mimic pdftotext -layout / emulated output.
 function at(cols: [number, string][]): string {
@@ -79,4 +79,39 @@ test("splitTwoColumns hard mode slices a bridging line soft mode keeps whole", (
   // Hard: the same line is sliced at the gutter, so the right side is preserved.
   expect(hard[0].split("\n").at(-1)).toBe("leftb");
   expect(hard[1].split("\n").at(-1)?.trim()).toBe("ridgeright");
+});
+
+test("reflowColumns keeps a line that crosses the gutter whole", () => {
+  const rows: [string, string][] = [
+    ["left one", "right one"],
+    ["left two", "right two"],
+    ["left three", "right three"],
+    ["left four", "right four"],
+    ["left five", "right five"],
+    ["left six", "right six"],
+    ["left seven", "right seven"],
+    ["left eight", "right eight"],
+    ["left nine", "right nine"],
+    ["left ten", "right ten"],
+    ["left eleven", "right eleven"],
+    ["left twelve", "right twelve"],
+  ];
+  const page = [
+    // A running header that sits across the gutter, as some books set it.
+    at([[30, "Part Nine | Testing"]]),
+    ...rows.map(([l, r]) =>
+      at([
+        [0, l],
+        [40, r],
+      ]),
+    ),
+  ].join("\n");
+  const lines = reflowColumns(page)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l);
+  expect(lines[0]).toBe("Part Nine | Testing");
+  expect(lines).not.toContain("esting");
+  expect(lines.slice(1, 13)).toEqual(rows.map(([l]) => l));
+  expect(lines.slice(13)).toEqual(rows.map(([, r]) => r));
 });
