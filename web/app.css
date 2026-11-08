@@ -116,13 +116,26 @@ body {
 .masthead {
   grid-area: head;
 }
-.rail {
+/* The rail's own grid cell: the sticky rail stays inside it, so at the end of
+   the page it can't slide under the footer. */
+.rail-cell {
   grid-area: rail;
+  min-width: 0;
+}
+.rail {
   display: flex;
   flex-direction: column;
   gap: clamp(0.7rem, 1.4vw, 1.1rem);
   position: sticky;
   top: 0.9rem;
+  /* A rail taller than the window scrolls on its own; otherwise its last
+     buttons stay out of reach until the page ends. */
+  max-height: calc(100vh - 1.8rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  /* Room for the buttons' focus rings inside the scroll box. */
+  padding: 3px;
+  margin: -3px;
 }
 .canvas {
   grid-area: sheet;

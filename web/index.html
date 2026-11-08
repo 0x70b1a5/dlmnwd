@@ -46,80 +46,86 @@
         </div>
       </header>
 
-      <aside class="rail">
-        <section class="panel" aria-label="Player's Book">
-          <div class="panel__title">
-            <span><span class="step">I</span> Player's Book</span>
-          </div>
-          <div class="panel__body">
-            <input id="file" type="file" accept="application/pdf" hidden />
-            <button id="pick" type="button" class="btn block">Choose PDF</button>
-            <p class="hint">
-              Your PDF never leaves this browser. What it reads is kept here, so you load it once.
-              Use one you own. Don't have one?
-              <a href="https://necroticgnome.com/products/dolmenwood-players-book">Buy it here.</a>
-            </p>
-            <p id="status" class="status" role="status" aria-live="polite">
-              Awaiting your Player's Book.
-            </p>
-            <button id="forget" type="button" class="btn ghost block" hidden>Forget book</button>
-          </div>
-        </section>
+      <div class="rail-cell">
+        <aside class="rail">
+          <section class="panel" aria-label="Player's Book">
+            <div class="panel__title">
+              <span><span class="step">I</span> Player's Book</span>
+            </div>
+            <div class="panel__body">
+              <input id="file" type="file" accept="application/pdf" hidden />
+              <button id="pick" type="button" class="btn block">Choose PDF</button>
+              <p class="hint">
+                Your PDF never leaves this browser. What it reads is kept here, so you load it once.
+                Use one you own. Don't have one?
+                <a href="https://necroticgnome.com/products/dolmenwood-players-book"
+                  >Buy it here.</a
+                >
+              </p>
+              <p id="status" class="status" role="status" aria-live="polite">
+                Awaiting your Player's Book.
+              </p>
+              <button id="forget" type="button" class="btn ghost block" hidden>Forget book</button>
+            </div>
+          </section>
 
-        <section class="panel" aria-label="Kindred and class">
-          <div class="panel__title">
-            <span><span class="step">II</span> Kindred &amp; Class</span>
-          </div>
-          <div class="panel__body">
-            <label class="field">
-              <span class="label">Kindred</span>
-              <select id="kindred" disabled></select>
-            </label>
-            <label class="field">
-              <span class="label">Class</span>
-              <select id="class" disabled></select>
-            </label>
-            <label class="field">
-              <span class="label">Alignment</span>
-              <select id="alignment" disabled>
-                <option value="Lawful">Lawful</option>
-                <option value="Neutral" selected>Neutral</option>
-                <option value="Chaotic">Chaotic</option>
-              </select>
-            </label>
-          </div>
-        </section>
+          <section class="panel" aria-label="Kindred and class">
+            <div class="panel__title">
+              <span><span class="step">II</span> Kindred &amp; Class</span>
+            </div>
+            <div class="panel__body">
+              <label class="field">
+                <span class="label">Kindred</span>
+                <select id="kindred" disabled></select>
+              </label>
+              <label class="field">
+                <span class="label">Class</span>
+                <select id="class" disabled></select>
+              </label>
+              <label class="field">
+                <span class="label">Alignment</span>
+                <select id="alignment" disabled>
+                  <option value="Lawful">Lawful</option>
+                  <option value="Neutral" selected>Neutral</option>
+                  <option value="Chaotic">Chaotic</option>
+                </select>
+              </label>
+            </div>
+          </section>
 
-        <section class="panel" aria-label="Name">
-          <div class="panel__title">
-            <span><span class="step">III</span> Name</span>
-          </div>
-          <div class="panel__body">
-            <label class="field">
-              <span class="label">Name</span>
-              <input id="name" type="text" placeholder="rolled if left blank" disabled />
-            </label>
-            <label class="field">
-              <span class="label">Player</span>
-              <input id="player" type="text" placeholder="optional" disabled />
-            </label>
-          </div>
-        </section>
+          <section class="panel" aria-label="Name">
+            <div class="panel__title">
+              <span><span class="step">III</span> Name</span>
+            </div>
+            <div class="panel__body">
+              <label class="field">
+                <span class="label">Name</span>
+                <input id="name" type="text" placeholder="rolled if left blank" disabled />
+              </label>
+              <label class="field">
+                <span class="label">Player</span>
+                <input id="player" type="text" placeholder="optional" disabled />
+              </label>
+            </div>
+          </section>
 
-        <section class="panel" aria-label="Generate">
-          <div class="panel__title">
-            <span><span class="step">IV</span> Generate</span>
-          </div>
-          <div class="panel__body">
-            <button id="generate" type="button" class="btn block" disabled>Generate</button>
-            <button id="add-party" type="button" class="btn ghost block" hidden>
-              Add to party
-            </button>
-            <button id="print" type="button" class="btn ghost block" hidden>Print</button>
-            <button id="download" type="button" class="btn ghost block" hidden>Download .md</button>
-          </div>
-        </section>
-      </aside>
+          <section class="panel" aria-label="Generate">
+            <div class="panel__title">
+              <span><span class="step">IV</span> Generate</span>
+            </div>
+            <div class="panel__body">
+              <button id="generate" type="button" class="btn block" disabled>Generate</button>
+              <button id="add-party" type="button" class="btn ghost block" hidden>
+                Add to party
+              </button>
+              <button id="print" type="button" class="btn ghost block" hidden>Print</button>
+              <button id="download" type="button" class="btn ghost block" hidden>
+                Download .md
+              </button>
+            </div>
+          </section>
+        </aside>
+      </div>
 
       <div class="canvas">
         <div class="tabs" role="tablist" aria-label="View">

@@ -82,6 +82,10 @@ export interface PC {
   spells: string[];
   knacks: string[];
   notes: string[];
+  /** Rolled persona fields by name (appearance, manner, …), when generated. */
+  persona: Record<string, string>;
+  /** Rolled body stats (age, height, weight, lifespan), when generated. */
+  physique: Record<string, string>;
   /** An adventurer retainer: counts for XP division, earns half. */
   retainer: boolean;
   status: "active" | "retired" | "dead";
@@ -136,6 +140,8 @@ export function blankPc(name: string): PC {
     spells: [],
     knacks: [],
     notes: [],
+    persona: {},
+    physique: {},
     retainer: false,
     status: "active",
   };

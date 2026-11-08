@@ -80,8 +80,8 @@ function table(head: string[], rows: HTMLElement[], numeric: boolean[]): HTMLEle
 }
 
 // Abilities stacked vertically (one row per ability) for easy parsing.
-function abilitiesSection(c: Character): HTMLElement {
-  const prime = new Set(c.klass.primeAbilities);
+function abilitiesSection(c: SheetData): HTMLElement {
+  const prime = new Set(c.prime);
   const rows = ABILITIES.map((a) =>
     h(
       "tr",
@@ -102,8 +102,8 @@ function abilitiesSection(c: Character): HTMLElement {
 }
 
 // Saving throws stacked vertically, one per row.
-function savesSection(c: Character): HTMLElement {
-  const s = c.klass.saves;
+function savesSection(c: SheetData): HTMLElement {
+  const s = c.saves;
   const mr = c.magicResistance > 0 ? `+${c.magicResistance}` : "0";
   const items: [string, string][] = [
     ["Doom", String(s.doom)],
@@ -119,7 +119,7 @@ function savesSection(c: Character): HTMLElement {
 
 // Skill targets as wrapping chips. Listen/Search/Survival lead, then the rest.
 const SKILL_ORDER = ["Listen", "Search", "Survival"];
-function skillsSection(c: Character): HTMLElement {
+function skillsSection(c: SheetData): HTMLElement {
   const rank = (n: string): number => {
     const i = SKILL_ORDER.indexOf(n);
     return i < 0 ? SKILL_ORDER.length : i;
@@ -189,14 +189,14 @@ function traitParagraph(t: { name: string; text: string }): HTMLElement {
 // One abilities block (kindred or class), name and description, two-column flow.
 // The section is titled by the group ("<Kindred> Abilities"), so no separate
 // "Kindred & Class Traits" header is needed — the source is self-evident.
-function traitSection(title: string, traits: Character["kindred"]["traits"]): HTMLElement | null {
+function traitSection(title: string, traits: SheetTrait[]): HTMLElement | null {
   if (traits.length === 0) return null;
   const list = h("div", { class: "trait-list" });
   for (const t of traits) list.append(traitParagraph(t));
   return section(title, list);
 }
 
-function languagesSection(c: Character): HTMLElement {
+function languagesSection(c: SheetData): HTMLElement {
   const langBadges = c.languages.map((l) => badge(l));
   if (c.extraLanguages > 0)
     langBadges.push(badge(`+${c.extraLanguages} of choice`, undefined, "soft"));
@@ -208,38 +208,26 @@ function languagesSection(c: Character): HTMLElement {
 
 // Equipment as a tall vertical table — roughly double the height of the
 // abilities/saves tables, since a starting character carries many items.
-function gearSection(c: Character): HTMLElement {
-  const rows: HTMLElement[] = [];
+function gearSection(c: SheetData): HTMLElement {
+  const rows = c.gear.rows.map(([k, v]) => h("tr", {}, h("td", {}, k), h("td", {}, v)));
+  return section("", table(c.gear.head, rows, [false, false]), 4);
+}
 
+/** A generated character's starting gear, as sheet rows. */
+function characterGear(c: Character): [string, string][] {
+  const rows: [string, string][] = [];
   // Loadout.
-  rows.push(
-    h("tr", {}, h("td", {}, "Armour"), h("td", {}, `${c.loadout.armour} (AC ${c.loadout.baseAc})`)),
-  );
-  for (const w of c.weapons) {
-    rows.push(h("tr", {}, h("td", {}, "Weapon"), h("td", {}, w)));
-  }
-  for (const item of c.classItems) {
-    rows.push(h("tr", {}, h("td", {}, "Class item"), h("td", {}, item)));
-  }
-  rows.push(h("tr", {}, h("td", {}, "Gold"), h("td", {}, `${c.gold} gp`)));
-
-  // General starting gear.
-  for (const g of c.generalItems) {
-    rows.push(h("tr", {}, h("td", {}, "Gear"), h("td", {}, g)));
-  }
-
-  // Adventuring items.
-  for (const g of c.adventuringItems) {
-    rows.push(h("tr", {}, h("td", {}, "Item"), h("td", {}, g)));
-  }
-
+  rows.push(["Armour", `${c.loadout.armour} (AC ${c.loadout.baseAc})`]);
+  for (const w of c.weapons) rows.push(["Weapon", w]);
+  for (const item of c.classItems) rows.push(["Class item", item]);
+  rows.push(["Gold", `${c.gold} gp`]);
+  // General starting gear, then adventuring items.
+  for (const g of c.generalItems) rows.push(["Gear", g]);
+  for (const g of c.adventuringItems) rows.push(["Item", g]);
   // Spell book — name only; the spell list and details live in the Magic section.
-  if (c.spellBook) {
-    rows.push(h("tr", {}, h("td", {}, "Spell book"), h("td", {}, c.spellBook.name)));
-  }
-
+  if (c.spellBook) rows.push(["Spell book", c.spellBook.name]);
   // Trinket lives in the persona section, not here.
-  return section("", table(["Item", "Detail"], rows, [false, false]), 4);
+  return rows;
 }
 
 function kvSection(title: string, rows: [string, string][]): HTMLElement | null {
@@ -250,17 +238,19 @@ function kvSection(title: string, rows: [string, string][]): HTMLElement | null 
   return section(title, dl, 4);
 }
 
-// Physique: rolled body stats plus the appearance persona fields.
-function physiqueSection(c: Character): HTMLElement | null {
-  const p = c.physique;
-  const rows: [string, string][] = [
-    ["Age", p?.age ?? ""],
-    ["Height", p?.height ?? ""],
-    ["Weight", p?.weight ?? ""],
-    ["Lifespan", p?.lifespan ?? ""],
-    ...APPEARANCE_FIELDS.map((f): [string, string] => [f, c.persona[f] ?? ""]),
+/** Physique: rolled body stats plus the appearance persona fields. A field
+ *  with no value stays as a blank line to fill in. */
+export function physiqueRows(
+  physique: Partial<Record<string, string>> | undefined,
+  persona: Record<string, string>,
+): [string, string][] {
+  return [
+    ["Age", physique?.age ?? ""],
+    ["Height", physique?.height ?? ""],
+    ["Weight", physique?.weight ?? ""],
+    ["Lifespan", physique?.lifespan ?? ""],
+    ...APPEARANCE_FIELDS.map((f): [string, string] => [f, persona[f] ?? ""]),
   ];
-  return kvSection("Physique", rows);
 }
 
 // Persona: manner and inner life (appearance lives in Physique). Ordered for a
@@ -270,16 +260,20 @@ function personaRank(f: string): number {
   return i < 0 ? PERSONA_ORDER.length : i;
 }
 
-function personaSection(c: Character): HTMLElement | null {
-  const entries = Object.entries(c.persona).filter(([f]) => !APPEARANCE_FIELDS.includes(f));
-  if (entries.length === 0 && !c.trinket) return null;
+/** Persona fields in reading order, appearance left out, the trinket last. */
+export function personaRows(persona: Record<string, string>, trinket?: string): [string, string][] {
+  const rows = Object.entries(persona)
+    .filter(([f]) => !APPEARANCE_FIELDS.includes(f))
+    .toSorted((a, b) => personaRank(a[0]) - personaRank(b[0]));
+  if (trinket) rows.push(["Trinket", trinket]);
+  return rows;
+}
+
+function personaSection(c: SheetData): HTMLElement | null {
+  if (c.persona.length === 0) return null;
   const dl = h("dl", { class: "kv" });
-  for (const [field, value] of entries.toSorted((a, b) => personaRank(a[0]) - personaRank(b[0]))) {
+  for (const [field, value] of c.persona)
     dl.append(h("div", {}, h("dt", {}, field), h("dd", {}, value)));
-  }
-  if (c.trinket) {
-    dl.append(h("div", {}, h("dt", {}, "Trinket"), h("dd", {}, c.trinket)));
-  }
   return section("Persona", dl, 4);
 }
 
@@ -335,8 +329,8 @@ function castingEntry(
 }
 
 // Magician's known spells, each with its tradition/rank tag and stat line.
-function spellsSection(c: Character): HTMLElement | null {
-  const spells = c.magic.spells;
+function spellsSection(c: SheetData): HTMLElement | null {
+  const spells = c.spells;
   if (spells.length === 0) return null;
   const list = h("div", { class: "trait-list" });
   for (const spell of spells) {
@@ -347,8 +341,8 @@ function spellsSection(c: Character): HTMLElement | null {
 }
 
 // Rolled glamours (enchanters, elves, grimalkins). No tradition tag.
-function glamoursSection(c: Character): HTMLElement | null {
-  const glamours = c.magic.glamours;
+function glamoursSection(c: SheetData): HTMLElement | null {
+  const glamours = c.glamours;
   if (glamours.length === 0) return null;
   const list = h("div", { class: "trait-list" });
   for (const g of glamours) {
@@ -358,25 +352,114 @@ function glamoursSection(c: Character): HTMLElement | null {
 }
 
 // Knacks (mosslings): level-gated abilities, so rendered like a trait.
-function knacksSection(c: Character): HTMLElement | null {
-  const knacks = c.magic.knacks;
+function knacksSection(c: SheetData): HTMLElement | null {
+  const knacks = c.knacks;
   if (knacks.length === 0) return null;
   const list = h("div", { class: "trait-list" });
   for (const k of knacks) list.append(traitParagraph(k));
   return section("Knacks", list);
 }
 
-/** Render the full sheet, filling in (with a staggered reveal) on each call. */
+// Runes (a party member's): name, magnitude tag, then how often it may be used.
+function runesSection(c: SheetData): HTMLElement | null {
+  if (c.runes.length === 0) return null;
+  const list = h("div", { class: "trait-list" });
+  for (const r of c.runes) list.append(castingEntry(r.name, r.tag, null, null, r.text));
+  return section("Runes", list);
+}
+
+function notesSection(c: SheetData): HTMLElement | null {
+  if (c.notes.length === 0) return null;
+  const list = h("div", { class: "trait-list" });
+  for (const n of c.notes) list.append(h("p", { class: "trait" }, n));
+  return section("Notes", list);
+}
+
+export interface SheetTrait {
+  name: string;
+  text: string;
+}
+
+/** Everything the sheet shows, from a generated character or a party member. */
+export interface SheetData {
+  name: string;
+  /** Under the name: level, kindred, class, alignment, background. */
+  badges: string[];
+  /** The headline stat line: [label, value], six of them. */
+  stats: [string, string][];
+  scores: Record<(typeof ABILITIES)[number], number>;
+  prime: string[];
+  saves: { doom: number; ray: number; hold: number; blast: number; spell: number };
+  magicResistance: number;
+  skills: Record<string, number>;
+  languages: string[];
+  extraLanguages: number;
+  gear: { head: [string, string]; rows: [string, string][] };
+  physique: [string, string][];
+  persona: [string, string][];
+  kindredTraits: { title: string; traits: SheetTrait[] };
+  classTraits: { title: string; traits: SheetTrait[] };
+  spells: {
+    name: string;
+    tradition: string | null;
+    rank: number | null;
+    duration: string | null;
+    range: string | null;
+    body: string | null;
+  }[];
+  glamours: { name: string; duration: string | null; range: string | null; body: string | null }[];
+  knacks: SheetTrait[];
+  runes: { name: string; tag: string | null; text: string }[];
+  notes: string[];
+}
+
+/** The sheet data for a freshly generated level-1 character. */
+export function characterSheet(c: Character): SheetData {
+  return {
+    name: c.name,
+    badges: [
+      "Level 1",
+      c.kindred.name,
+      c.klass.name,
+      c.alignment,
+      ...(c.background ? [c.background] : []),
+    ],
+    stats: [
+      ["Hit Points", String(c.hp)],
+      ["Armour Class", String(c.loadout.ac)],
+      ["Attack", signed(c.klass.attack)],
+      ["Speed", String(c.speed)],
+      ["Gold", String(c.gold)],
+      ["XP to L2", c.klass.nextLevelXp.toLocaleString()],
+    ],
+    scores: c.scores,
+    prime: c.klass.primeAbilities,
+    saves: c.klass.saves,
+    magicResistance: c.magicResistance,
+    skills: c.skills,
+    languages: c.languages,
+    extraLanguages: c.extraLanguages,
+    gear: { head: ["Item", "Detail"], rows: characterGear(c) },
+    physique: physiqueRows(c.physique, c.persona),
+    persona: personaRows(c.persona, c.trinket ?? undefined),
+    kindredTraits: { title: `${c.kindred.name} Abilities`, traits: resolvedKindredTraits(c) },
+    classTraits: { title: `${c.klass.name} Abilities`, traits: c.klass.traits },
+    spells: c.magic.spells,
+    glamours: c.magic.glamours,
+    knacks: c.magic.knacks,
+    runes: [],
+    notes: [],
+  };
+}
+
+/** Render a generated character's sheet. */
 export function renderSheet(sheet: HTMLElement, c: Character): void {
-  const meta = h(
-    "div",
-    { class: "sheet-sub-row" },
-    badge("Level 1"),
-    badge(c.kindred.name),
-    badge(c.klass.name),
-    badge(c.alignment),
-    ...(c.background ? [badge(c.background)] : []),
-  );
+  renderSheetData(sheet, characterSheet(c));
+}
+
+/** Render the full sheet, filling in (with a staggered reveal) on each call. */
+export function renderSheetData(sheet: HTMLElement, c: SheetData): void {
+  const meta = h("div", { class: "sheet-sub-row" }, ...c.badges.map((b) => badge(b)));
   const head = h(
     "div",
     { class: "sheet-head" },
@@ -385,28 +468,20 @@ export function renderSheet(sheet: HTMLElement, c: Character): void {
   const statline = h(
     "dl",
     { class: "statline" },
-    h("div", {}, h("dt", {}, "Hit Points"), h("dd", {}, String(c.hp))),
-    h("div", {}, h("dt", {}, "Armour Class"), h("dd", {}, String(c.loadout.ac))),
-    h("div", {}, h("dt", {}, "Attack"), h("dd", {}, signed(c.klass.attack))),
-    h("div", {}, h("dt", {}, "Speed"), h("dd", {}, String(c.speed))),
-    h("div", {}, h("dt", {}, "Gold"), h("dd", {}, String(c.gold))),
-    h("div", {}, h("dt", {}, "XP to L2"), h("dd", {}, c.klass.nextLevelXp.toLocaleString())),
+    ...c.stats.map(([k, v]) => h("div", {}, h("dt", {}, k), h("dd", {}, v))),
   );
   // Three columns: abilities + skills/languages/persona stacked on the left,
   // saves in the middle, equipment on the right. Traits span full width below.
   const stack = (...secs: (HTMLElement | null)[]): HTMLElement =>
     h("div", { class: "stack span-4" }, ...secs.filter((n): n is HTMLElement => n !== null));
-  const kindredTraits = traitSection(`${c.kindred.name} Abilities`, resolvedKindredTraits(c));
-  const classTraits = traitSection(`${c.klass.name} Abilities`, c.klass.traits);
-  const spells = spellsSection(c);
-  const glamours = glamoursSection(c);
-  const knacks = knacksSection(c);
+  const kindredTraits = traitSection(c.kindredTraits.title, c.kindredTraits.traits);
+  const classTraits = traitSection(c.classTraits.title, c.classTraits.traits);
   const grid = h(
     "div",
     { class: "sheet-grid" },
     // Physique (tall) sits under the left stack, Languages (short) under the
     // middle, so the two columns balance beside the tall Persona.
-    stack(abilitiesSection(c), skillsSection(c), physiqueSection(c)),
+    stack(abilitiesSection(c), skillsSection(c), kvSection("Physique", c.physique)),
     stack(savesSection(c), languagesSection(c), personaSection(c)),
     gearSection(c),
   );
@@ -416,9 +491,15 @@ export function renderSheet(sheet: HTMLElement, c: Character): void {
   const abilityFlow = h(
     "div",
     { class: "ability-flow" },
-    ...[kindredTraits, classTraits, spells, glamours, knacks].filter(
-      (n): n is HTMLElement => n !== null,
-    ),
+    ...[
+      kindredTraits,
+      classTraits,
+      spellsSection(c),
+      glamoursSection(c),
+      knacksSection(c),
+      runesSection(c),
+      notesSection(c),
+    ].filter((n): n is HTMLElement => n !== null),
   );
 
   const blocks = [head, statline, grid, abilityFlow];

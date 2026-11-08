@@ -62,8 +62,16 @@ type Message = { text: string; kind: "info" | "error" };
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** Show the party in `root`. `onCount` hears the member count after each change. */
-export function mountParty(root: HTMLElement, onCount: (n: number) => void): PartyView {
+export interface PartyHooks {
+  /** Hears the member count after each change. */
+  onCount(n: number): void;
+  /** Show a member's full sheet. */
+  onSheet(pc: PC, party: Party, rules: PartyRules): void;
+}
+
+/** Show the party in `root`. */
+export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
+  const { onCount } = hooks;
   let rules = emptyRules();
   let party: Party;
   let message: Message | null = null;
@@ -355,6 +363,7 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
       h(
         "div",
         { class: "member__foot" },
+        button("View full sheet", () => hooks.onSheet(pc, party, rules)),
         button("Download sheet .md", () =>
           download(
             `${safeName(pc.name, "character")}.md`,
@@ -363,7 +372,7 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
           ),
         ),
         button("Remove from party", () => {
-          if (!confirm(`Remove ${pc.name} from the party? This can't be undone.`)) return;
+          if (!confirm(`Remove ${pc.name} from the party?`)) return;
           act(() => {
             party.members = party.members.filter((m) => m !== pc);
             return `Removed ${pc.name} from the party.`;

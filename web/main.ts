@@ -23,10 +23,12 @@ import {
   saveBook,
   spellMap,
 } from "./book.ts";
+import { pcMarkdown } from "../src/party/render.ts";
 import { emptyRules } from "../src/party/rules.ts";
+import { memberSheet } from "./member-sheet.ts";
 import { mountParty } from "./party.ts";
 import { download, safeName } from "./party-store.ts";
-import { renderEmpty, renderSheet } from "./sheet.ts";
+import { renderEmpty, renderSheet, renderSheetData } from "./sheet.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const fileInput = $<HTMLInputElement>("file");
@@ -191,8 +193,22 @@ for (const [name, [btn]] of Object.entries(tabs) as [Tab, [HTMLButtonElement, HT
   btn.addEventListener("click", () => showTab(name));
 
 const partyCount = $<HTMLSpanElement>("party-count");
-const party = mountParty($<HTMLElement>("party"), (n) => {
-  partyCount.textContent = n > 0 ? `(${n})` : "";
+const party = mountParty($<HTMLElement>("party"), {
+  onCount(n) {
+    partyCount.textContent = n > 0 ? `(${n})` : "";
+  },
+  // A member's full sheet, as they are now, ready to print or download.
+  onSheet(pc, members, rules) {
+    renderSheetData(sheet, memberSheet(pc, members, rules, book));
+    lastMarkdown = pcMarkdown(pc, members, rules);
+    lastName = pc.name;
+    lastCharacter = null;
+    addPartyBtn.hidden = true;
+    printBtn.hidden = false;
+    downloadBtn.hidden = false;
+    showTab("sheet");
+    window.scrollTo(0, 0);
+  },
 });
 
 // ── generate & download ────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 // A freshly rolled character (gen/character.ts) as a party member. Pure.
 
-import type { Character } from "../gen/character.ts";
+import { type Character, resolvedKindredTraits } from "../gen/character.ts";
 import { pick } from "../util.ts";
 import { computeAc } from "./encumbrance.ts";
 import { addItem, makeItem } from "./items.ts";
@@ -29,7 +29,14 @@ export function characterToPc(c: Character, rules: PartyRules): PC {
     glamours: c.magic.glamours.map((g) => g.name),
     knacks: c.magic.knacks.map((k) => k.name),
     spells: c.magic.spells.map((s) => s.name),
+    persona: { ...c.persona },
+    physique: { ...c.physique },
   });
+  // A trait rolled at level 1 shows only on the generated sheet: keep the
+  // roll as a note, under the trait's own name.
+  const kindredTraits = resolvedKindredTraits(c);
+  const rolled = kindredTraits.find((t, i) => t !== c.kindred.traits[i]);
+  if (rolled && c.symbioticFlesh) pc.notes.push(`${rolled.name} at level 1: ${c.symbioticFlesh}`);
   pc.coins.gp = c.gold;
   const { catalog, enc } = rules;
   const add = (text: string) => {
