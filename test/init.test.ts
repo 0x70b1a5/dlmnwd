@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initLines, rollInitiative } from "../src/commands/init.ts";
+import { initLines, rollInitiative } from "../src/initiative.ts";
 
 const seq = (...rolls: number[]) => {
   let i = 0;

@@ -149,6 +149,10 @@ State survives between invocations in `~/.cache/dw/dw-session.json` (same home
 as the index cache; override with `DW_SESSION`). A missing or unreadable state
 file starts a fresh session with a note.
 
+The web app's Table tab has the same clock, with dice, reaction, morale,
+initiative and the wandering check. It also looks up spells, glamours, knacks
+and runes in your Player's Book. The clock stays in that browser.
+
 ## The party
 
 `dw party` and `dw pc` keep the characters you're running: gear, coins, HP, XP,
@@ -202,7 +206,8 @@ prints where it is.
 The web app has the same party under its Party tab. Generate a character, then
 choose Add to party. The party stays in that browser. Export saves it as a
 `party.json` that `dw party` can use (copy it to `dw party path`), and Import
-reads one back.
+reads one back. "View full sheet" shows a member on the Sheet tab, as they are
+now, to print or download.
 
 ## Status
 

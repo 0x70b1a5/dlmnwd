@@ -166,7 +166,7 @@ function subPoint(s: { kind: string; label?: string; body: string }): HTMLElemen
 // One trait: bold name + lead sentence, then structured sub-points indented
 // under it. A named sub-heading opens a further-indented group — giving three
 // visible levels: name, sub-heading, run-in label.
-function traitParagraph(t: { name: string; text: string }): HTMLElement {
+export function traitParagraph(t: { name: string; text: string }): HTMLElement {
   const { lead, subs } = structureTrait(t.text);
   const p = h("p", { class: "trait" }, h("span", { class: "tn" }, `${t.name}. `), lead);
   if (subs.length === 0) return p;
@@ -300,7 +300,7 @@ export function renderEmpty(sheet: HTMLElement): void {
 // optional uppercase tag, a Duration/Range stat line, then body prose. Every
 // size here comes from the sheet's existing three type tokens (trait body,
 // trait-group header, field-label) so the block reads as one hierarchy.
-function castingEntry(
+export function castingEntry(
   name: string,
   tag: string | null,
   duration: string | null,

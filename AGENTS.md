@@ -192,6 +192,13 @@ reason to exist; never add an upload affordance.
   rules from the saved book (`web/book.ts`). `web/party-store.ts` keeps the
   party in the browser's local storage and exports or imports the CLI's
   `party.json`. An unreadable saved party is copied aside, never overwritten.
+  "View full sheet" shows a member on the Sheet tab: `web/member-sheet.ts`
+  turns a member into the `SheetData` that `renderSheetData` draws.
+- `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the
+  wandering check, the turn clock (`src/turn-clock.ts`, the pure half of
+  `src/turn.ts`) and a lookup in the saved book. It is built once; rolls only
+  add to its log, so the field in use keeps the focus. `web/ui.ts` holds the
+  form helpers it shares with the Party tab.
 - `scripts/build-single.ts` inlines the bundled JS/CSS/fonts into one self-contained
   HTML after `web:build`; it throws if any external asset survives.
 - Deploys to Cloudflare Pages as the static `dist/` build; bundled at dlmnwd.com with an

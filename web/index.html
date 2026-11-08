@@ -147,12 +147,24 @@
           >
             Party <span id="party-count"></span>
           </button>
+          <button
+            id="tab-table"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="table-frame"
+          >
+            Table
+          </button>
         </div>
         <div id="sheet-frame" class="frame" role="tabpanel" aria-labelledby="tab-sheet">
           <article id="sheet" class="sheet" data-state="empty" aria-live="polite"></article>
         </div>
         <div id="party-frame" class="frame" role="tabpanel" aria-labelledby="tab-party" hidden>
           <div id="party" class="sheet"></div>
+        </div>
+        <div id="table-frame" class="frame" role="tabpanel" aria-labelledby="tab-table" hidden>
+          <div id="table" class="sheet"></div>
         </div>
       </div>
 

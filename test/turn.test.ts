@@ -165,3 +165,12 @@ describe("state persistence", () => {
     expect(() => clearState()).not.toThrow();
   });
 });
+
+test("reads a saved turn state and refuses a malformed one", async () => {
+  const { readTurnState } = await import("../src/turn-clock.ts");
+  const good = { turn: 3, checkEvery: 2, tracked: [{ name: "lamp", remaining: 4 }] };
+  expect(readTurnState(good)).toEqual(good);
+  expect(readTurnState(null)).toBeNull();
+  expect(readTurnState({ ...good, turn: -1 })).toBeNull();
+  expect(readTurnState({ ...good, tracked: [{ name: "lamp", remaining: 0 }] })).toBeNull();
+});

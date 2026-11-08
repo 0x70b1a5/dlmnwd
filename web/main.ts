@@ -27,6 +27,7 @@ import { pcMarkdown } from "../src/party/render.ts";
 import { emptyRules } from "../src/party/rules.ts";
 import { memberSheet } from "./member-sheet.ts";
 import { mountParty } from "./party.ts";
+import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
 import { renderEmpty, renderSheet, renderSheetData } from "./sheet.ts";
 
@@ -157,6 +158,7 @@ async function load(file: File): Promise<void> {
 function useBook(b: Book): void {
   book = b;
   party.setRules(bookRules(b));
+  table.setBook(b);
   kindredSel.replaceChildren(randomOpt(), ...b.kindreds.map((k) => opt(k.id, k.name)));
   updateClassOptions();
   setRiteEnabled(true);
@@ -172,13 +174,15 @@ forgetBtn.addEventListener("click", () => {
   kindredSel.replaceChildren();
   classSel.replaceChildren();
   party.setRules(emptyRules());
+  table.setBook(null);
 });
 
 // ── sheet and party tabs ───────────────────────────────────────────────────
-type Tab = "sheet" | "party";
+type Tab = "sheet" | "party" | "table";
 const tabs: Record<Tab, [HTMLButtonElement, HTMLElement]> = {
   sheet: [$<HTMLButtonElement>("tab-sheet"), $<HTMLElement>("sheet-frame")],
   party: [$<HTMLButtonElement>("tab-party"), $<HTMLElement>("party-frame")],
+  table: [$<HTMLButtonElement>("tab-table"), $<HTMLElement>("table-frame")],
 };
 function showTab(tab: Tab): void {
   for (const [name, [btn, panel]] of Object.entries(tabs) as [
@@ -191,6 +195,8 @@ function showTab(tab: Tab): void {
 }
 for (const [name, [btn]] of Object.entries(tabs) as [Tab, [HTMLButtonElement, HTMLElement]][])
   btn.addEventListener("click", () => showTab(name));
+
+const table = mountTable($<HTMLElement>("table"));
 
 const partyCount = $<HTMLSpanElement>("party-count");
 const party = mountParty($<HTMLElement>("party"), {
