@@ -237,8 +237,9 @@ if permitted + natural-armour bonus only with light/no armour), merged skill tar
 (Listen/Search/Survival default to 6; kindred/class lower them; class skill tables and
 "Skill Target of N for X" trait prose both contribute, taking the minimum), kindred
 languages + INT-mod extra languages, and a rolled persona. `toMarkdown` emits an
-Obsidian-vault-format front-matter sheet. Trait/ability _names_ are left marked for
-manual fill; the loadout is a default to swap for rolled starting gear.
+Obsidian-vault-format front-matter sheet. Both sheets give each kindred and class
+trait with its name and text, as parsed from the book. The loadout is a default to
+swap for rolled starting gear.
 
 ## Code conventions
 
