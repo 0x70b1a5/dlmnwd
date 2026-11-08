@@ -11,18 +11,19 @@
 // the unminified build because patches/pdfjs-dist@*.patch only patches that one.
 import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
-import { type Character, generate, type SpellDetail, toMarkdown } from "../src/gen/character.ts";
-import { parseAdventuringItems } from "../src/parse/equipment.ts";
-import { parseGlamourDetails, parseGlamoursTable } from "../src/parse/glamour.ts";
-import { type KnackEntry, parseKnacks } from "../src/parse/knack.ts";
-import { parseSymbioticFlesh } from "../src/parse/symbiotic-flesh.ts";
-import { parseSpells } from "../src/parse/spell.ts";
+import { type Character, generate, toMarkdown } from "../src/gen/character.ts";
 import { extractPagesEmulated } from "../src/pdf/emulate.ts";
-import { type ParsedClass, parseClasses } from "../src/parse/class.ts";
-import { type ParsedKindred, parseKindreds } from "../src/parse/kindred.ts";
-import type { GlamourEntry } from "../src/parse/glamour.ts";
-import { rulesFromPages } from "../src/party/book.ts";
 import { canBeAlignment, canBeClass, rollKindredClass } from "../src/rules.ts";
+import {
+  type Book,
+  bookRules,
+  forgetBook,
+  loadSavedBook,
+  parseBook,
+  saveBook,
+  spellMap,
+} from "./book.ts";
+import { emptyRules } from "../src/party/rules.ts";
 import { mountParty } from "./party.ts";
 import { download, safeName } from "./party-store.ts";
 import { renderEmpty, renderSheet } from "./sheet.ts";
@@ -40,6 +41,7 @@ const generateBtn = $<HTMLButtonElement>("generate");
 const printBtn = $<HTMLButtonElement>("print");
 const downloadBtn = $<HTMLButtonElement>("download");
 const addPartyBtn = $<HTMLButtonElement>("add-party");
+const forgetBtn = $<HTMLButtonElement>("forget");
 const sheet = $<HTMLElement>("sheet");
 
 // The rite's fields stay visible but inert until a book is offered.
@@ -48,16 +50,8 @@ function setRiteEnabled(on: boolean): void {
   for (const el of riteFields) el.disabled = !on;
 }
 
-let kindreds: ParsedKindred[] = [];
-let classes: ParsedClass[] = [];
-let adventuringItems: string[] = [];
-let glamoursTable: string[] = [];
-let glamourDetails: Map<string, GlamourEntry> = new Map();
-let knacks: KnackEntry[] = [];
-let symbioticFlesh: string[] = [];
-// Spell details keyed by lowercased name, parsed straight from the PDF pages —
-// the browser has no SQLite, so this stands in for the CLI's spell DB lookup.
-let spellRows: Map<string, SpellDetail> = new Map();
+// The parsed Player's Book (book.ts): from the PDF, or saved in this browser.
+let book: Book | null = null;
 let lastMarkdown = "";
 let lastName = "character";
 let lastCharacter: Character | null = null;
@@ -89,6 +83,8 @@ const randomOpt = (): HTMLOptionElement => opt(RANDOM, "Random");
 
 /** Rebuild the class dropdown, graying out classes the selected kindred can't take. */
 function updateClassOptions(): void {
+  const kindreds = book?.kindreds ?? [];
+  const classes = book?.classes ?? [];
   const kindred = kindreds.find((k) => k.id === kindredSel.value);
   const prev = classSel.value;
   classSel.replaceChildren(randomOpt());
@@ -109,7 +105,7 @@ function updateClassOptions(): void {
  *  random class stays compatible with Chaotic: the roll skips the classes that
  *  forbid it. */
 function updateAlignmentOptions(): void {
-  const klass = classes.find((c) => c.id === classSel.value);
+  const klass = book?.classes.find((c) => c.id === classSel.value);
   const chaoticOpt = [...alignmentSel.options].find((o) => o.value === "Chaotic");
   if (!chaoticOpt) return;
   const allowed = klass ? canBeAlignment(klass.id, "Chaotic") : true;
@@ -136,40 +132,17 @@ async function load(file: File): Promise<void> {
   pick.disabled = true;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const pages = await extractPagesEmulated(bytes);
-
-    classes = parseClasses(pages);
-    kindreds = parseKindreds(pages);
-    adventuringItems = parseAdventuringItems(pages);
-    glamoursTable = parseGlamoursTable(pages);
-    glamourDetails = parseGlamourDetails(pages, glamoursTable);
-    knacks = parseKnacks(pages);
-    symbioticFlesh = parseSymbioticFlesh(pages);
-    spellRows = new Map(
-      parseSpells(pages).map((s) => [
-        s.name.toLowerCase(),
-        {
-          name: s.name,
-          tradition: s.tradition ?? null,
-          rank: s.rank ?? null,
-          duration: s.duration ?? null,
-          range: s.range ?? null,
-          body: s.body,
-          page: s.source.page,
-        },
-      ]),
-    );
-
-    if (kindreds.length === 0 || classes.length === 0) {
+    const parsed = parseBook(await extractPagesEmulated(bytes), file.name);
+    if (parsed.kindreds.length === 0 || parsed.classes.length === 0) {
       setStatus("No kindreds or classes found. Is this the Dolmenwood Player's Book?", "error");
       return;
     }
-
-    party.setRules(rulesFromPages(pages, classes, kindreds));
-    kindredSel.replaceChildren(randomOpt(), ...kindreds.map((k) => opt(k.id, k.name)));
-    updateClassOptions();
-    setRiteEnabled(true);
-    setStatus(`Loaded ${kindreds.length} kindreds, ${classes.length} classes.`);
+    const kept = saveBook(parsed);
+    useBook(parsed);
+    setStatus(
+      `Loaded ${parsed.kindreds.length} kindreds, ${parsed.classes.length} classes.` +
+        (kept ? " Kept in this browser for next time." : ""),
+    );
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     setStatus(`Couldn't read that PDF: ${detail}`, "error");
@@ -177,6 +150,27 @@ async function load(file: File): Promise<void> {
     pick.disabled = false;
   }
 }
+
+/** Make a parsed book the one the generator and the party use. */
+function useBook(b: Book): void {
+  book = b;
+  party.setRules(bookRules(b));
+  kindredSel.replaceChildren(randomOpt(), ...b.kindreds.map((k) => opt(k.id, k.name)));
+  updateClassOptions();
+  setRiteEnabled(true);
+  forgetBtn.hidden = false;
+}
+
+forgetBtn.addEventListener("click", () => {
+  forgetBook();
+  forgetBtn.hidden = true;
+  setStatus("The book is forgotten. This page holds no book data until you load the PDF again.");
+  book = null;
+  setRiteEnabled(false);
+  kindredSel.replaceChildren();
+  classSel.replaceChildren();
+  party.setRules(emptyRules());
+});
 
 // ── sheet and party tabs ───────────────────────────────────────────────────
 type Tab = "sheet" | "party";
@@ -203,6 +197,8 @@ const party = mountParty($<HTMLElement>("party"), (n) => {
 
 // ── generate & download ────────────────────────────────────────────────────
 generateBtn.addEventListener("click", () => {
+  if (!book) return;
+  const { kindreds, classes } = book;
   const rolled = rollKindredClass(kindreds, classes, {
     kindred: kindreds.find((k) => k.id === kindredSel.value),
     klass: classes.find((c) => c.id === classSel.value),
@@ -218,12 +214,12 @@ generateBtn.addEventListener("click", () => {
     name: nameInput.value.trim() || undefined,
     player: playerInput.value.trim() || undefined,
     alignment: alignmentSel.value,
-    adventuringItems,
-    spellRows,
-    glamoursTable,
-    glamourDetails,
-    knacks,
-    symbioticFlesh,
+    adventuringItems: book.adventuringItems,
+    spellRows: spellMap(book),
+    glamoursTable: book.glamoursTable,
+    glamourDetails: new Map(book.glamourDetails),
+    knacks: book.knacks,
+    symbioticFlesh: book.symbioticFlesh,
   });
   lastMarkdown = toMarkdown(character);
   lastName = character.name;
@@ -281,3 +277,11 @@ downloadBtn.addEventListener("click", () => {
 // inviting the user to load their own PDF.
 import { demoCharacter } from "./demo.ts";
 renderSheet(sheet, demoCharacter);
+
+// A book read on an earlier visit: ready without the PDF.
+const saved = loadSavedBook();
+if (saved) {
+  useBook(saved);
+  const when = new Date(saved.readAt).toLocaleDateString();
+  setStatus(`Using ${saved.fileName}, read on ${when} and kept in this browser.`);
+}

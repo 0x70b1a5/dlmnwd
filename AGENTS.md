@@ -182,10 +182,14 @@ reason to exist; never add an upload affordance.
 - `web/index.html` is the entry; `web/app.css` is the implemented visual system
   (a light-inverted "textmode" character sheet set entirely in Departure Mono).
   `DESIGN.md` and `PRODUCT.md` describe the design/product intent as context.
+- `web/book.ts` parses the Player's Book once (`parseBook`) and keeps the result
+  in the browser's local storage, so a reload needs no PDF. It is the user's own
+  copy on their own machine, like the CLI's index. `INDEX_VERSION`
+  (`src/version.ts`) discards a copy saved by older parsers. Forget book clears it.
 - `web/party.ts` is the Party tab: the generated characters a table runs, with
   XP and levels, HP, gear and encumbrance, coins, runes, glamours, knacks, spells
   and notes. It calls the same `src/party/` code as `dw party` and `dw pc`, with
-  rules from `party/book.ts` (`rulesFromPages`). `web/party-store.ts` keeps the
+  rules from the saved book (`web/book.ts`). `web/party-store.ts` keeps the
   party in the browser's local storage and exports or imports the CLI's
   `party.json`. An unreadable saved party is copied aside, never overwritten.
 - `scripts/build-single.ts` inlines the bundled JS/CSS/fonts into one self-contained
@@ -215,7 +219,7 @@ invented content (`test/party.test.ts`, `test/party-actions.test.ts`).
 `dw party import` reads a fillable sheet's form fields via pdf.js
 (`src/pdf/fields.ts`) and maps them in `party/import.ts`. Items are resolved
 against the catalog (`party/items.ts`), and the book's weight wins over the
-sheet's (disagreements are reported). Bump `INDEX_VERSION` in `db.ts` whenever a
+sheet's (disagreements are reported). Bump `INDEX_VERSION` in `version.ts` whenever a
 parser's output changes shape, so existing indexes rebuild.
 
 ### Character generation

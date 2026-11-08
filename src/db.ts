@@ -5,15 +5,14 @@ import { join } from "node:path";
 import type { ParsedClass } from "./parse/class.ts";
 import type { ParsedKindred } from "./parse/kindred.ts";
 import type { Hex, Monster } from "./schema.ts";
+import { INDEX_VERSION } from "./version.ts";
 
 // The database is a machine-local cache derived from the user's own PDFs,
 // the same status as any extraction cache. It is never committed or shipped.
 const CACHE_DIR = join(homedir(), ".cache", "dw");
 const DB_PATH = join(CACHE_DIR, "dw.db");
 
-// Bump when a parser starts producing new or reshaped data, so an index built by
-// an older version is rebuilt even though the PDF itself hasn't changed.
-export const INDEX_VERSION = 5;
+export { INDEX_VERSION }; // defined in version.ts, so the web app can share it
 
 export interface SearchHit {
   book: string;
