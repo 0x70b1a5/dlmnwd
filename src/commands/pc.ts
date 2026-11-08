@@ -1,23 +1,24 @@
 import { writeFileSync } from "node:fs";
+import {
+  allowedCount,
+  applyCoins,
+  applyHp,
+  coinSpec,
+  findRune,
+  forgetName,
+  gainsRunesOnLevel,
+  learnName,
+  moveCoins,
+  setField,
+} from "../party/actions.ts";
 import { describeLoad, type Load } from "../party/encumbrance.ts";
 import { addItem, findItem, makeItem, removeItem, slotCost } from "../party/items.ts";
 import { firstName } from "../party/import.ts";
 import { formatCoins, loadOf, pcMarkdown, showParty, showPc } from "../party/render.ts";
-import { classOf, kindredOf, type PartyRules } from "../party/rules.ts";
+import { classOf, type PartyRules } from "../party/rules.ts";
 import { grantRune, lookupRune, rollRuneGrant, runeStatus, useRune } from "../party/runes.ts";
-import {
-  ABILITIES,
-  type Ability,
-  type CoinKind,
-  type Coins,
-  findMember,
-  type Party,
-  type PC,
-  saveParty,
-  type Where,
-} from "../party/store.ts";
+import { findMember, type Party, type PC, saveParty, type Where } from "../party/store.ts";
 import { canLevel, grantXp, levelUp, nextLevelXp } from "../party/xp.ts";
-import { pick } from "../util.ts";
 import { partyContext } from "./party.ts";
 
 const USAGE = `usage: dw pc <name> [command]      (name: any unambiguous part of it)
@@ -138,9 +139,7 @@ export function cmdPc(args: string[]): void {
       const [from, to] = verb === "bank" ? [pc.coins, pc.banked] : [pc.banked, pc.coins];
       for (const spec of rest) {
         const { kind, n } = coinSpec(spec.replace(/^[+=]/, ""));
-        if (from[kind] < n) throw new Error(`${pc.name} has only ${from[kind]}${kind} to move.`);
-        from[kind] -= n;
-        to[kind] += n;
+        moveCoins(from, to, kind, n, pc.name);
       }
       save();
       console.log(
@@ -151,12 +150,7 @@ export function cmdPc(args: string[]): void {
     }
 
     case "hp": {
-      const spec = rest[0] ?? "";
-      if (spec === "max" || spec === "full") pc.hp = pc.maxHp;
-      else if (/^=\d+$/.test(spec)) pc.hp = parseInt(spec.slice(1), 10);
-      else if (/^[+-]\d+$/.test(spec)) pc.hp += parseInt(spec, 10);
-      else throw new Error("usage: dw pc <name> hp <-N | +N | =N | max>");
-      pc.hp = Math.min(pc.hp, pc.maxHp);
+      applyHp(pc, rest[0] ?? "");
       save();
       const state = pc.hp <= 0 ? "  ⚠ at 0 HP or below" : "";
       console.log(`${pc.name}: HP ${pc.hp}/${pc.maxHp}${state}`);
@@ -381,46 +375,24 @@ function listCmd(
   args: string[],
 ): void {
   const [op, ...words] = rest;
-  const label = field.replace(/s$/, "");
   const name = words.join(" ").trim();
   const list = pc[field];
   if (op === "add") {
-    let chosen = name;
-    if (args.includes("--random")) {
-      const pool = known.filter((k) => !list.some((l) => l.toLowerCase() === k.toLowerCase()));
-      if (pool.length === 0) throw new Error(`No unknown ${field} left to roll (or none indexed).`);
-      chosen = pick(pool);
-    } else {
-      if (!name) throw new Error(`usage: dw pc <name> ${label} add <name>`);
-      const q = name.toLowerCase();
-      const hit =
-        known.find((k) => k.toLowerCase() === q) ??
-        known.find((k) => k.toLowerCase().startsWith(q)) ??
-        known.find((k) => k.toLowerCase().includes(q));
-      if (hit) chosen = hit;
-      else if (known.length > 0 && !args.includes("--force"))
-        throw new Error(`"${name}" isn't one of the book's ${field}; --force to add it anyway.`);
-    }
-    if (list.some((l) => l.toLowerCase() === chosen.toLowerCase()))
-      throw new Error(`${pc.name} already knows ${chosen}.`);
-    list.push(chosen);
+    const chosen = learnName(pc, field, known, name, {
+      random: args.includes("--random"),
+      force: args.includes("--force"),
+    });
     saveParty(party);
     console.log(`${pc.name} learns ${chosen}. ${cap(field)}: ${list.join(", ")}`);
-    const klass = classOf(rules, pc.class);
-    const row = klass?.advancement?.find((r) => r.level === pc.level);
-    const allowed = row?.extras[cap(field)];
-    if (allowed && list.length > parseInt(allowed, 10))
+    const allowed = allowedCount(pc, rules, field);
+    if (allowed !== null && list.length > allowed)
       console.log(
-        `  ⚠ ${klass!.name} level ${pc.level} knows ${allowed} ${field} by class (kindred ${field} may add more)`,
+        `  ⚠ ${classOf(rules, pc.class)!.name} level ${pc.level} knows ${allowed} ${field} by class (kindred ${field} may add more)`,
       );
     return;
   }
   if (op === "rm" || op === "remove") {
-    const q = name.toLowerCase();
-    const hit =
-      list.find((l) => l.toLowerCase() === q) ?? list.find((l) => l.toLowerCase().includes(q));
-    if (!hit) throw new Error(`${pc.name} doesn't know a ${label} matching "${name}".`);
-    pc[field] = list.filter((l) => l !== hit);
+    const hit = forgetName(pc, field, name);
     saveParty(party);
     console.log(`${pc.name} forgets ${hit}. ${cap(field)}: ${pc[field].join(", ") || "none"}`);
     return;
@@ -474,9 +446,7 @@ function runeCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
     }
     case "rm":
     case "remove": {
-      const q = name.toLowerCase();
-      const hit = pc.runes.find((r) => r.name.toLowerCase().includes(q));
-      if (!hit) throw new Error(`${pc.name} doesn't know a rune matching "${name}".`);
+      const hit = findRune(pc, name);
       pc.runes = pc.runes.filter((r) => r !== hit);
       saveParty(party);
       console.log(`${pc.name} loses ${hit.name}.`);
@@ -484,11 +454,7 @@ function runeCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
     }
     case "use":
     case "cast": {
-      const q = name.toLowerCase();
-      const hit =
-        pc.runes.find((r) => r.name.toLowerCase() === q) ??
-        pc.runes.find((r) => r.name.toLowerCase().includes(q));
-      if (!hit) throw new Error(`${pc.name} doesn't know a rune matching "${name}".`);
+      const hit = findRune(pc, name);
       const st = useRune(hit, pc, party.day, rules.runes, args.includes("--force"));
       saveParty(party);
       console.log(
@@ -517,109 +483,5 @@ function runeCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
     }
     default:
       throw new Error(`Unknown rune command "${op}" (add, rm, use, learn).`);
-  }
-}
-
-/** Does the class (or a kindred trait) grant a rune chance on each new level? */
-function gainsRunesOnLevel(pc: PC, rules: PartyRules): boolean {
-  if (classOf(rules, pc.class)?.runeOnLevel) return true;
-  const traits = kindredOf(rules, pc.kindred)?.traits ?? [];
-  return traits.some((t) => /each time the character gains a Level[^.]*\brune/i.test(t.text));
-}
-
-function coinSpec(spec: string): { kind: CoinKind; n: number } {
-  const m = spec.match(/^(\d+)\s*(cp|sp|gp|pp)$/i);
-  if (!m) throw new Error(`Can't read "${spec}" as coins (e.g. 120gp, 5sp).`);
-  return { kind: m[2].toLowerCase() as CoinKind, n: parseInt(m[1], 10) };
-}
-
-function applyCoins(c: Coins, spec: string): void {
-  const m = spec.match(/^([+=-]?)(\d+)\s*(cp|sp|gp|pp)$/i);
-  if (!m) throw new Error(`Can't read "${spec}" as coins (e.g. +120gp, -5sp, =0cp).`);
-  const kind = m[3].toLowerCase() as CoinKind;
-  const n = parseInt(m[2], 10);
-  if (m[1] === "=") c[kind] = n;
-  else if (m[1] === "-") {
-    if (c[kind] < n) throw new Error(`Only ${c[kind]}${kind} to spend.`);
-    c[kind] -= n;
-  } else c[kind] += n;
-}
-
-function setField(pc: PC, rules: PartyRules, kv: string): void {
-  const m = kv.match(/^([a-z_]+)=(.*)$/i);
-  if (!m) throw new Error(`Expected key=value, got "${kv}".`);
-  const [, k, v] = m;
-  const key = k.toLowerCase();
-  if ((ABILITIES as readonly string[]).includes(key)) {
-    pc.scores[key as Ability] = parseInt(v, 10);
-    return;
-  }
-  switch (key) {
-    case "name":
-    case "player":
-    case "alignment":
-    case "background":
-    case "affiliation":
-      pc[key] = v;
-      return;
-    case "moon_sign":
-    case "moonsign":
-      pc.moonSign = v;
-      return;
-    case "kindred": {
-      const kin = rules.kindreds.find(
-        (x) => x.id === v.toLowerCase() || x.name.toLowerCase() === v.toLowerCase(),
-      );
-      if (!kin && rules.kindreds.length) throw new Error(`Unknown kindred "${v}".`);
-      pc.kindred = kin?.id ?? v.toLowerCase();
-      return;
-    }
-    case "class": {
-      const c = rules.classes.find((x) => x.id === v.toLowerCase());
-      if (!c && rules.classes.length) throw new Error(`Unknown class "${v}".`);
-      pc.class = c?.id ?? v.toLowerCase();
-      return;
-    }
-    case "level": {
-      // Setting the level directly re-reads Attack and Saves from the table.
-      pc.level = parseInt(v, 10);
-      const row = classOf(rules, pc.class)?.advancement?.find((r) => r.level === pc.level);
-      if (row) {
-        pc.attack = row.attack;
-        pc.saves = { ...row.saves };
-      }
-      return;
-    }
-    case "xp":
-      pc.xp = parseInt(v, 10);
-      return;
-    case "hp":
-      pc.hp = parseInt(v, 10);
-      return;
-    case "max_hp":
-    case "maxhp":
-      pc.maxHp = parseInt(v, 10);
-      return;
-    case "ac_bonus":
-    case "acbonus":
-      pc.acBonus = parseInt(v, 10);
-      return;
-    case "attack":
-      pc.attack = parseInt(v, 10);
-      return;
-    case "mr":
-    case "magic_resistance":
-      pc.magicResistance = parseInt(v, 10);
-      return;
-    case "retainer":
-      pc.retainer = yes(v);
-      return;
-    case "status":
-      if (!["active", "retired", "dead"].includes(v))
-        throw new Error("status: active|retired|dead");
-      pc.status = v as PC["status"];
-      return;
-    default:
-      throw new Error(`Unknown field "${k}".`);
   }
 }

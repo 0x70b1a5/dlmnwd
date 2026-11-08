@@ -182,6 +182,12 @@ reason to exist; never add an upload affordance.
 - `web/index.html` is the entry; `web/app.css` is the implemented visual system
   (a light-inverted "textmode" character sheet set entirely in Departure Mono).
   `DESIGN.md` and `PRODUCT.md` describe the design/product intent as context.
+- `web/party.ts` is the Party tab: the generated characters a table runs, with
+  XP and levels, HP, gear and encumbrance, coins, runes, glamours, knacks, spells
+  and notes. It calls the same `src/party/` code as `dw party` and `dw pc`, with
+  rules from `party/book.ts` (`rulesFromPages`). `web/party-store.ts` keeps the
+  party in the browser's local storage and exports or imports the CLI's
+  `party.json`. An unreadable saved party is copied aside, never overwritten.
 - `scripts/build-single.ts` inlines the bundled JS/CSS/fonts into one self-contained
   HTML after `web:build`; it throws if any external asset survives.
 - Deploys to Cloudflare Pages as the static `dist/` build; bundled at dlmnwd.com with an
@@ -189,17 +195,22 @@ reason to exist; never add an upload affordance.
 
 ### Party management
 
-`src/party/` keeps the user's characters (`store.ts`: one JSON file at
-`$DW_PARTY` → `$XDG_DATA_HOME/dw/party.json` → `~/.local/share/dw/party.json`,
-written atomically, never overwritten when unreadable). It is user data, not a
-cache. Everything else in `src/party/` is pure and takes a `PartyRules` bundle
-(`rules.ts`) of book-derived tables that `build.ts` stores in `lookup_tables`:
+`src/party/` keeps the user's characters. `model.ts` holds the types and
+`normalizeParty`; `store.ts` saves them to one JSON file at `$DW_PARTY` →
+`$XDG_DATA_HOME/dw/party.json` → `~/.local/share/dw/party.json` (written
+atomically, never overwritten when unreadable). It is user data, not a cache.
+Only `store.ts` and `rules-db.ts` (loads the rules from SQLite) use Node or Bun
+APIs. Everything else in `src/party/` is pure, so the web app runs it too. Keep it
+that way. Changes the CLI and web app both make (coins, HP, name lists, `set`
+fields) live in `actions.ts`; `commands/pc.ts` only parses and prints. The pure
+code takes a `PartyRules` bundle (`rules.ts`) of book-derived tables
+(`book.ts` parses them; `build.ts` stores them in `lookup_tables`):
 `catalog` (`parse/gear.ts`: every item with a listed weight), `encumbrance`
 (weight/slot/basic tables, gear-slot examples), `runes` (`parse/rune.ts`),
 `prime_xp`/`kindred_xp` (`parse/xp.ts`), `glamours`, `knacks`. Class
 advancement rows live on `ParsedClass.advancement`. Missing tables fall back to
 the generic defaults in `src/rules.ts`. Tests build `PartyRules` by hand with
-invented content (`test/party.test.ts`).
+invented content (`test/party.test.ts`, `test/party-actions.test.ts`).
 
 `dw party import` reads a fillable sheet's form fields via pdf.js
 (`src/pdf/fields.ts`) and maps them in `party/import.ts`. Items are resolved

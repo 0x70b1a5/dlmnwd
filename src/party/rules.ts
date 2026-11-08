@@ -1,9 +1,8 @@
 // The book-derived rules party management runs on, bundled so the logic stays
-// pure (tests build one by hand; commands load it from the index). Anything the
-// book didn't yield falls back to the generic defaults in src/rules.ts.
+// pure (tests build one by hand; the CLI loads it from the index, rules-db.ts;
+// the web app builds it from the PDF's pages, book.ts). Anything the book didn't
+// yield falls back to the generic defaults in src/rules.ts. Pure: no Node APIs.
 
-import type { Database } from "bun:sqlite";
-import { allClasses, allKindreds, getLookup } from "../db.ts";
 import type { ParsedClass } from "../parse/class.ts";
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import type { ParsedKindred } from "../parse/kindred.ts";
@@ -51,11 +50,17 @@ export function emptyRules(): PartyRules {
   };
 }
 
-/** Load the rules from the index (the Player's Book rows). Missing pieces fall
- *  back to the defaults, so the party still works without a book configured. */
-export function loadRules(db: Database): PartyRules {
+/**
+ * Assemble the rules from the book's lookup tables (by their index names) and
+ * its classes and kindreds. Missing pieces fall back to the defaults, so the
+ * party still works without a book.
+ */
+export function rulesFromLookups(
+  get: <T>(name: string) => T | null,
+  classes: ParsedClass[],
+  kindreds: ParsedKindred[],
+): PartyRules {
   const r = emptyRules();
-  const get = <T>(name: string): T | null => getLookup<T>(db, "players", name);
   const enc = get<Partial<EncumbranceRules>>("encumbrance") ?? {};
   const prime = get<XpBand[]>("prime_xp");
   return {
@@ -70,8 +75,8 @@ export function loadRules(db: Database): PartyRules {
     runes: get<RuneRules>("runes") ?? r.runes,
     primeXp: prime && prime.length > 0 ? prime : r.primeXp,
     kindredXp: get<Record<string, number>>("kindred_xp") ?? {},
-    classes: allClasses(db),
-    kindreds: allKindreds(db),
+    classes,
+    kindreds,
     glamours: get<string[]>("glamours") ?? [],
     knacks: get<string[]>("knacks") ?? [],
   };

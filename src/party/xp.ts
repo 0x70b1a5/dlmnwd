@@ -6,8 +6,8 @@ import { roll } from "../dice.ts";
 import type { LevelRow, ParsedClass } from "../parse/class.ts";
 import { abilityMod } from "../rules.ts";
 import { classOf, type PartyRules } from "./rules.ts";
-import type { PC, Party, Saves } from "./store.ts";
-import { activeMembers } from "./store.ts";
+import type { PC, Party, Saves } from "./model.ts";
+import { activeMembers } from "./model.ts";
 
 /** Percent applied to XP earned: prime-ability modifier + kindred bonus. */
 export function xpModifier(pc: PC, rules: PartyRules): number {

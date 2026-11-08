@@ -6,7 +6,8 @@ import { pdfPath } from "../pdf/config.ts";
 import { readFormFields } from "../pdf/fields.ts";
 import { pcFromSheet } from "../party/import.ts";
 import { loadOf, showParty } from "../party/render.ts";
-import { emptyRules, loadRules, type PartyRules } from "../party/rules.ts";
+import { emptyRules, type PartyRules } from "../party/rules.ts";
+import { loadRules } from "../party/rules-db.ts";
 import {
   ENC_METHODS,
   type EncMethod,

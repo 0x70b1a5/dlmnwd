@@ -4,7 +4,7 @@ import { abilityMod } from "../rules.ts";
 import { coinCount, computeAc, computeLoad, describeLoad, type Load } from "./encumbrance.ts";
 import { classOf, kindredOf, type PartyRules } from "./rules.ts";
 import { runeStatus } from "./runes.ts";
-import { ABILITIES, type Coins, COIN_KINDS, type InvItem, type Party, type PC } from "./store.ts";
+import { ABILITIES, type Coins, COIN_KINDS, type InvItem, type Party, type PC } from "./model.ts";
 import { canLevel, nextLevelXp, xpModifier } from "./xp.ts";
 
 export function loadOf(pc: PC, party: Party, rules: PartyRules): Load {

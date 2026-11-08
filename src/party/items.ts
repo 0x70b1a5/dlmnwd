@@ -5,7 +5,7 @@
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import { singular } from "../parse/gear.ts";
 import { SLOT_COST } from "../rules.ts";
-import type { InvItem, PC, Where } from "./store.ts";
+import type { InvItem, PC, Where } from "./model.ts";
 
 const STOP = new Set(["of", "and", "or", "the", "a", "an", "with"]);
 

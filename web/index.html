@@ -110,6 +110,9 @@
           </div>
           <div class="panel__body">
             <button id="generate" type="button" class="btn block" disabled>Generate</button>
+            <button id="add-party" type="button" class="btn ghost block" hidden>
+              Add to party
+            </button>
             <button id="print" type="button" class="btn ghost block" hidden>Print</button>
             <button id="download" type="button" class="btn ghost block" hidden>Download .md</button>
           </div>
@@ -117,8 +120,31 @@
       </aside>
 
       <div class="canvas">
-        <div class="frame">
+        <div class="tabs" role="tablist" aria-label="View">
+          <button
+            id="tab-sheet"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="sheet-frame"
+          >
+            Sheet
+          </button>
+          <button
+            id="tab-party"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="party-frame"
+          >
+            Party <span id="party-count"></span>
+          </button>
+        </div>
+        <div id="sheet-frame" class="frame" role="tabpanel" aria-labelledby="tab-sheet">
           <article id="sheet" class="sheet" data-state="empty" aria-live="polite"></article>
+        </div>
+        <div id="party-frame" class="frame" role="tabpanel" aria-labelledby="tab-party" hidden>
+          <div id="party" class="sheet"></div>
         </div>
       </div>
 

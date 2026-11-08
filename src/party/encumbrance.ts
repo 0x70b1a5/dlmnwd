@@ -3,7 +3,7 @@
 
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import { abilityMod } from "../rules.ts";
-import type { Coins, EncMethod, PC } from "./store.ts";
+import type { Coins, EncMethod, PC } from "./model.ts";
 
 export interface Load {
   method: EncMethod;

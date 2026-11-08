@@ -20,13 +20,11 @@ import { parseSymbioticFlesh } from "../parse/symbiotic-flesh.ts";
 import { extractPages } from "../pdf/extract.ts";
 import { pdfPath } from "../pdf/config.ts";
 import { canBeAlignment, canBeClass, normalizeAlignment, rollKindredClass } from "../rules.ts";
-import { computeAc } from "../party/encumbrance.ts";
-import { addItem, makeItem } from "../party/items.ts";
-import type { PartyRules } from "../party/rules.ts";
-import { grantRune } from "../party/runes.ts";
-import { blankPc, type PC, saveParty } from "../party/store.ts";
-import { pick } from "../util.ts";
+import { characterToPc } from "../party/from-character.ts";
+import { saveParty } from "../party/store.ts";
 import { partyContext } from "./party.ts";
+
+export { characterToPc };
 
 export function cmdNew(args: string[]): void {
   const character = rollCharacter(args);
@@ -128,61 +126,6 @@ export function rollCharacter(args: string[]): Character {
     knacks,
     symbioticFlesh,
   });
-}
-
-/** Turn a freshly rolled character into a party member, resolving the rolled
- *  gear against the book's equipment lists. */
-export function characterToPc(c: Character, rules: PartyRules): PC {
-  const pc = blankPc(c.name);
-  Object.assign(pc, {
-    player: c.player,
-    kindred: c.kindred.id,
-    class: c.klass.id,
-    alignment: c.alignment,
-    background: c.background ?? "",
-    scores: { ...c.scores },
-    hp: c.hp,
-    maxHp: c.hp,
-    attack: c.klass.attack,
-    saves: { ...c.klass.saves },
-    magicResistance: c.magicResistance,
-    skills: { ...c.skills },
-    languages: [...c.languages],
-    glamours: c.magic.glamours.map((g) => g.name),
-    knacks: c.magic.knacks.map((k) => k.name),
-    spells: c.magic.spells.map((s) => s.name),
-  });
-  pc.coins.gp = c.gold;
-  const { catalog, enc } = rules;
-  const add = (text: string) => {
-    if (text.trim()) addItem(pc, makeItem(catalog, enc, text).inv);
-  };
-  // "Leather armour + shield" → the armour and the shield.
-  for (const part of c.loadout.armour.split(/\s*\+\s*/))
-    if (!/^no armour$/i.test(part) && !/^none$/i.test(part)) add(part);
-  for (const w of c.weapons) for (const part of w.split(/\s*\+\s*/)) add(part);
-  for (const g of [...c.classItems, ...c.generalItems, ...c.adventuringItems]) {
-    // "Backpack with rations, waterskin, and tinder box" is several things.
-    for (const part of g.split(/\s*(?:,|\bwith\b|\band\b)\s*/)) add(part);
-  }
-  if (c.spellBook) add(`Spell book (${c.spellBook.name})`);
-  // A class that starts with a random rune of some magnitude gets one now.
-  const magnitude = c.klass.startingRune;
-  const pool = rules.runes.runes.filter((r) => r.magnitude === magnitude);
-  if (magnitude && pool.length > 0) grantRune(pc, pick(pool));
-  if (c.trinket)
-    pc.items.push({
-      name: c.trinket,
-      qty: 1,
-      weight: enc.trinketWeight,
-      slots: 0,
-      where: "stowed",
-      note: "tiny",
-    });
-  // Keep the generator's AC (it knows kindred armour bonuses); the difference
-  // from worn gear is a standing bonus.
-  pc.acBonus = c.loadout.ac - computeAc(pc, catalog);
-  return pc;
 }
 
 function isRandom(arg: string | undefined): boolean {

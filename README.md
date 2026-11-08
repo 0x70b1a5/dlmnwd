@@ -199,6 +199,11 @@ override with `DW_PARTY`). It's your campaign state, not a cache, so it is
 written atomically and never replaced if it can't be read. `dw party path`
 prints where it is.
 
+The web app has the same party under its Party tab. Generate a character, then
+choose Add to party. The party stays in that browser. Export saves it as a
+`party.json` that `dw party` can use (copy it to `dw party path`), and Import
+reads one back.
+
 ## Status
 
 Working: `roll`, `react`, `morale`, `init`, `wander`, `turn`, `npc`, `mon`,

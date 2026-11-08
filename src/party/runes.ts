@@ -6,7 +6,7 @@
 import { roll } from "../dice.ts";
 import type { RuneEntry, RuneRules, UsageBand } from "../parse/rune.ts";
 import { pick } from "../util.ts";
-import type { KnownRune, PC } from "./store.ts";
+import type { KnownRune, PC } from "./model.ts";
 
 const DAYS: Record<string, number> = { day: 1, week: 7, year: 365 };
 

@@ -7,7 +7,7 @@ import { computeAc } from "./encumbrance.ts";
 import { addItem, makeItem } from "./items.ts";
 import type { PartyRules } from "./rules.ts";
 import { lookupRune } from "./runes.ts";
-import { ABILITIES, type Ability, blankPc, type EncMethod, type PC } from "./store.ts";
+import { ABILITIES, type Ability, blankPc, type EncMethod, type PC } from "./model.ts";
 
 const ABILITY_FIELD: Record<Ability, string> = {
   str: "Strength",

@@ -11,7 +11,7 @@
 // the unminified build because patches/pdfjs-dist@*.patch only patches that one.
 import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
-import { generate, type SpellDetail, toMarkdown } from "../src/gen/character.ts";
+import { type Character, generate, type SpellDetail, toMarkdown } from "../src/gen/character.ts";
 import { parseAdventuringItems } from "../src/parse/equipment.ts";
 import { parseGlamourDetails, parseGlamoursTable } from "../src/parse/glamour.ts";
 import { type KnackEntry, parseKnacks } from "../src/parse/knack.ts";
@@ -21,7 +21,10 @@ import { extractPagesEmulated } from "../src/pdf/emulate.ts";
 import { type ParsedClass, parseClasses } from "../src/parse/class.ts";
 import { type ParsedKindred, parseKindreds } from "../src/parse/kindred.ts";
 import type { GlamourEntry } from "../src/parse/glamour.ts";
+import { rulesFromPages } from "../src/party/book.ts";
 import { canBeAlignment, canBeClass, rollKindredClass } from "../src/rules.ts";
+import { mountParty } from "./party.ts";
+import { download, safeName } from "./party-store.ts";
 import { renderEmpty, renderSheet } from "./sheet.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -36,6 +39,7 @@ const playerInput = $<HTMLInputElement>("player");
 const generateBtn = $<HTMLButtonElement>("generate");
 const printBtn = $<HTMLButtonElement>("print");
 const downloadBtn = $<HTMLButtonElement>("download");
+const addPartyBtn = $<HTMLButtonElement>("add-party");
 const sheet = $<HTMLElement>("sheet");
 
 // The rite's fields stay visible but inert until a book is offered.
@@ -56,6 +60,7 @@ let symbioticFlesh: string[] = [];
 let spellRows: Map<string, SpellDetail> = new Map();
 let lastMarkdown = "";
 let lastName = "character";
+let lastCharacter: Character | null = null;
 
 // ── load & parse ──────────────────────────────────────────────────────────
 pick.addEventListener("click", () => fileInput.click());
@@ -124,8 +129,10 @@ async function load(file: File): Promise<void> {
   setRiteEnabled(false);
   downloadBtn.hidden = true;
   printBtn.hidden = true;
+  addPartyBtn.hidden = true;
   renderEmpty(sheet);
   lastMarkdown = "";
+  lastCharacter = null;
   pick.disabled = true;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -158,6 +165,7 @@ async function load(file: File): Promise<void> {
       return;
     }
 
+    party.setRules(rulesFromPages(pages, classes, kindreds));
     kindredSel.replaceChildren(randomOpt(), ...kindreds.map((k) => opt(k.id, k.name)));
     updateClassOptions();
     setRiteEnabled(true);
@@ -169,6 +177,29 @@ async function load(file: File): Promise<void> {
     pick.disabled = false;
   }
 }
+
+// ── sheet and party tabs ───────────────────────────────────────────────────
+type Tab = "sheet" | "party";
+const tabs: Record<Tab, [HTMLButtonElement, HTMLElement]> = {
+  sheet: [$<HTMLButtonElement>("tab-sheet"), $<HTMLElement>("sheet-frame")],
+  party: [$<HTMLButtonElement>("tab-party"), $<HTMLElement>("party-frame")],
+};
+function showTab(tab: Tab): void {
+  for (const [name, [btn, panel]] of Object.entries(tabs) as [
+    Tab,
+    [HTMLButtonElement, HTMLElement],
+  ][]) {
+    btn.setAttribute("aria-selected", String(name === tab));
+    panel.hidden = name !== tab;
+  }
+}
+for (const [name, [btn]] of Object.entries(tabs) as [Tab, [HTMLButtonElement, HTMLElement]][])
+  btn.addEventListener("click", () => showTab(name));
+
+const partyCount = $<HTMLSpanElement>("party-count");
+const party = mountParty($<HTMLElement>("party"), (n) => {
+  partyCount.textContent = n > 0 ? `(${n})` : "";
+});
 
 // ── generate & download ────────────────────────────────────────────────────
 generateBtn.addEventListener("click", () => {
@@ -196,9 +227,21 @@ generateBtn.addEventListener("click", () => {
   });
   lastMarkdown = toMarkdown(character);
   lastName = character.name;
+  lastCharacter = character;
   renderSheet(sheet, character);
+  showTab("sheet");
   printBtn.hidden = false;
   downloadBtn.hidden = false;
+  addPartyBtn.hidden = false;
+  addPartyBtn.disabled = false;
+});
+
+addPartyBtn.addEventListener("click", () => {
+  if (!lastCharacter) return;
+  party.add(lastCharacter);
+  // One character joins once; generate again for another.
+  addPartyBtn.disabled = true;
+  showTab("party");
 });
 
 printBtn.addEventListener("click", () => window.print());
@@ -231,15 +274,7 @@ themeBtn.addEventListener("click", () => applyTheme(nextTheme[currentTheme()]));
 
 downloadBtn.addEventListener("click", () => {
   if (!lastMarkdown) return;
-  const safe = lastName.replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "") || "character";
-  const url = URL.createObjectURL(new Blob([lastMarkdown], { type: "text/markdown" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${safe}.md`;
-  a.click();
-  // Revoke on the next macrotask so the download navigation has started; some
-  // browsers cancel the download if the URL is revoked synchronously.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  download(`${safeName(lastName, "character")}.md`, lastMarkdown, "text/markdown");
 });
 
 // Paint the demo character on first load — shows what the tool produces,
