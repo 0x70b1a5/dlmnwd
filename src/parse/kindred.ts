@@ -377,6 +377,28 @@ function parsePersona(pages: string[], namesPage: number): Record<string, string
   return persona;
 }
 
+/** A note under a table: a capitalised label of one or two words and a colon. */
+const NOTE = /^\s*[A-Z][a-z]+(?: [a-z]+)?:\s/;
+
+/**
+ * Where to cut a two-column table line: at the gap of 2+ spaces nearest the
+ * right column's x-offset, so a word that starts a little left of it (a note
+ * under the table) is not cut in two. With no gap nearby, at the offset itself.
+ */
+function columnCut(line: string, x: number): number {
+  let best = x;
+  let bestDist = 13;
+  for (const m of line.matchAll(/ {2,}/g)) {
+    const end = (m.index ?? 0) + m[0].length;
+    const dist = Math.abs(end - x);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = end;
+    }
+  }
+  return best;
+}
+
 /**
  * Parse a kindred's trinket table. The table is on its own page (not within the
  * kindred section), headed "{KINDRED} TRINKETS" with a "d100 Trinket" header.
@@ -418,6 +440,10 @@ function parseTrinkets(pages: string[], kindredName: string): string[] {
     const right: string[] = [];
     let leftCur = "";
     let rightCur = "";
+    // A "Label: …" line under a column is a note after the table, not part of
+    // its last entry; the column takes no more text once one appears.
+    let leftDone = false;
+    let rightDone = false;
 
     for (let i = d100Line + 1; i < lines.length; i++) {
       const line = lines[i];
@@ -428,8 +454,9 @@ function parseTrinkets(pages: string[], kindredName: string): string[] {
       if (line.trim() === "") continue;
 
       // Split the line at the column boundary.
-      const leftPart = line.slice(0, rightX);
-      const rightPart = line.slice(rightX);
+      const cut = columnCut(line, rightX);
+      const leftPart = line.slice(0, cut);
+      const rightPart = line.slice(cut);
 
       // Left column.
       const lm = leftPart.match(rangeRe);
@@ -439,7 +466,9 @@ function parseTrinkets(pages: string[], kindredName: string): string[] {
           if (leftCur) left.push(leftCur);
           leftCur = text;
         }
-      } else if (leftPart.trim() && leftCur && !/^\s*\d{1,3}\s*$/.test(leftPart)) {
+      } else if (NOTE.test(leftPart) && leftCur) {
+        leftDone = true;
+      } else if (leftPart.trim() && leftCur && !leftDone && !/^\s*\d{1,3}\s*$/.test(leftPart)) {
         leftCur += ` ${leftPart.trim()}`;
       }
 
@@ -451,7 +480,9 @@ function parseTrinkets(pages: string[], kindredName: string): string[] {
           if (rightCur) right.push(rightCur);
           rightCur = text;
         }
-      } else if (rightPart.trim() && rightCur && !/^\s*\d{1,3}\s*$/.test(rightPart)) {
+      } else if (NOTE.test(rightPart) && rightCur) {
+        rightDone = true;
+      } else if (rightPart.trim() && rightCur && !rightDone && !/^\s*\d{1,3}\s*$/.test(rightPart)) {
         rightCur += ` ${rightPart.trim()}`;
       }
     }

@@ -244,6 +244,29 @@ test("parses the kindred trinket table", () => {
   expect(k.trinkets.some((t) => t.includes("light."))).toBe(true);
 });
 
+test("leaves a note under the trinket table out of the entries", () => {
+  // The note starts a little left of the right column's "d100", as in the book.
+  const page = [
+    trinketPage,
+    at([[66, "Weightiness: invented trinkets weigh 7 coins. Not"]]),
+    at([[66, "part of any trinket."]]),
+    "",
+    "42",
+  ].join("\n");
+  const [k] = parseKindreds(
+    [trinketSection, page],
+    [{ id: "testkin", name: "Testkin", kindredType: "Mortal" }],
+  );
+  expect(k.trinkets).toEqual([
+    "A bent spoon that sings at dawn",
+    "A shiny pebble that glows in moon light.",
+    "A feather from a dream bird",
+    "A key to an unknown door",
+    "A dried flower pressed in a book",
+    "A coin that always lands on edge",
+  ]);
+});
+
 test("trinkets is empty when no trinket table is present", () => {
   const [k] = parseKindreds(
     [namesPage, personaPage],
