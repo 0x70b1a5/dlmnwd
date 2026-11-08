@@ -21,6 +21,7 @@ import {
   ENC_METHODS,
   type EncMethod,
   freshParty,
+  normalizeParty,
   type InvItem,
   type Party,
   type PC,
@@ -77,14 +78,36 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
   let selected = party.members.length > 0 ? 0 : -1;
 
   /** Run a change, save, and show its message (or its error). */
+  // Undo: the party as it was before each recent change, newest last.
+  const history: { label: string; party: string; selected: number }[] = [];
+  const HISTORY = 30;
+
+  /** Run a change, save, and show its message (or its error). A change that
+   *  fails is rolled back, so a half-made change never stays. */
   function act(change: () => string | void): void {
+    const before = JSON.stringify(party);
+    const wasSelected = selected;
     try {
       const text = change();
+      history.push({ label: text || "the last change", party: before, selected: wasSelected });
+      if (history.length > HISTORY) history.shift();
       storedOk = storeParty(party);
       message = text ? { text, kind: "info" } : null;
     } catch (err) {
+      party = normalizeParty(JSON.parse(before), "The party");
+      selected = wasSelected;
       message = { text: (err as Error).message, kind: "error" };
     }
+    render();
+  }
+
+  function undo(): void {
+    const last = history.pop();
+    if (!last) return;
+    party = normalizeParty(JSON.parse(last.party), "The party");
+    selected = last.selected;
+    storedOk = storeParty(party);
+    message = { text: `Undone: ${clip(last.label, 90)}`, kind: "info" };
     render();
   }
 
@@ -92,6 +115,9 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
     if (selected >= party.members.length) selected = party.members.length - 1;
     onCount(party.members.length);
     const pc = party.members[selected];
+    // Redrawing replaces every control, so keep the focus and scroll position.
+    const focus = focusKey(root);
+    const scroll = [window.scrollX, window.scrollY] as const;
     root.replaceChildren(
       h(
         "div",
@@ -102,6 +128,8 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
         pc ? member(pc) : null,
       ),
     );
+    if (focus) restoreFocus(root, focus);
+    window.scrollTo(scroll[0], scroll[1]);
   }
 
   function statusLine(): HTMLElement {
@@ -171,9 +199,11 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
       void readPartyFile(f).then(
         (p) => {
           if (party.members.length > 0 && !confirm(`Replace the party with ${f.name}?`)) return;
-          party = p;
-          selected = party.members.length > 0 ? 0 : -1;
-          act(() => `Imported ${plural(party.members.length, "member")} from ${f.name}.`);
+          act(() => {
+            party = p;
+            selected = party.members.length > 0 ? 0 : -1;
+            return `Imported ${plural(party.members.length, "member")} from ${f.name}.`;
+          });
         },
         (err: Error) => {
           message = { text: err.message, kind: "error" };
@@ -204,6 +234,7 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
         button("Export", () => download("party.json", partyJson(party), "application/json")),
         button("Import", () => (file as HTMLInputElement).click()),
         file,
+        undoButton(),
       ),
     );
   }
@@ -891,6 +922,15 @@ export function mountParty(root: HTMLElement, onCount: (n: number) => void): Par
     );
   }
 
+  function undoButton(): HTMLElement {
+    const last = history.at(-1);
+    // A fixed label keeps focus on Undo across redraws; the title says what it undoes.
+    const b = button("Undo", undo);
+    b.title = last ? `Undo: ${clip(last.label, 90)}` : "Nothing to undo";
+    if (!last) (b as HTMLButtonElement).disabled = true;
+    return b;
+  }
+
   // ── small builders ───────────────────────────────────────────────────────
   function removeBtn(what: string, change: () => string): HTMLElement {
     return button("x", () => act(change), "btn mini", "button", `Remove ${what}`);
@@ -993,14 +1033,14 @@ function numInput(
   if (onChange)
     el.addEventListener("change", () => {
       const v = parseInt(el.value, 10);
-      if (Number.isFinite(v)) onChange(v);
+      if (Number.isFinite(v)) afterFocusMoves(() => onChange(v));
     });
   return el;
 }
 
 function textInput(value: string, onChange: (v: string) => void): HTMLInputElement {
   const el = h("input", { type: "text", value }) as HTMLInputElement;
-  el.addEventListener("change", () => onChange(el.value));
+  el.addEventListener("change", () => afterFocusMoves(() => onChange(el.value)));
   return el;
 }
 
@@ -1016,6 +1056,49 @@ function select(
       h("option", v === value ? { value: v, selected: "" } : { value: v }, label),
     ),
   ) as HTMLSelectElement;
-  if (onChange) el.addEventListener("change", () => onChange(el.value));
+  if (onChange) el.addEventListener("change", () => afterFocusMoves(() => onChange(el.value)));
   return el;
+}
+
+/**
+ * Run a change from a field's change event once the browser has moved focus. A
+ * field fires change as Tab leaves it; redrawing at once would replace the
+ * control Tab is about to move to, and focus would fall to the page.
+ */
+function afterFocusMoves(run: () => void): void {
+  setTimeout(run, 0);
+}
+
+function clip(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+/** A name for the focused control that survives a redraw: its block, its kind,
+ *  its label, and which of the controls with that name it is. */
+function controlKey(el: Element): string {
+  const area =
+    el.closest(".member__block")?.querySelector("h3")?.textContent ??
+    (el.closest(".party-bar") ? "bar" : el.closest(".party-roster") ? "roster" : "");
+  const label =
+    el.getAttribute("aria-label") ??
+    el.getAttribute("placeholder") ??
+    (el.tagName === "BUTTON" ? el.textContent : "") ??
+    "";
+  return `${area}|${el.tagName}|${(el as HTMLInputElement).type ?? ""}|${label}`;
+}
+
+const CONTROLS = "input, select, button, textarea";
+
+function focusKey(root: HTMLElement): { key: string; n: number } | null {
+  const el = document.activeElement;
+  if (!el || !root.contains(el) || !el.matches(CONTROLS)) return null;
+  const key = controlKey(el);
+  const same = [...root.querySelectorAll(CONTROLS)].filter((c) => controlKey(c) === key);
+  return { key, n: same.indexOf(el) };
+}
+
+function restoreFocus(root: HTMLElement, focus: { key: string; n: number }): void {
+  const same = [...root.querySelectorAll(CONTROLS)].filter((c) => controlKey(c) === focus.key);
+  const el = (same[focus.n] ?? same.at(-1)) as HTMLElement | undefined;
+  el?.focus({ preventScroll: true });
 }
