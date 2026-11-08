@@ -27,5 +27,8 @@
   "devDependencies": {
     "oxfmt": "^0.52.0",
     "oxlint": "^1.67.0"
+  },
+  "patchedDependencies": {
+    "pdfjs-dist@6.2.108": "patches/pdfjs-dist@6.2.108.patch"
   }
 }

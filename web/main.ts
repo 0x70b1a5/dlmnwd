@@ -7,8 +7,9 @@
 // Importing the worker module runs pdf.js on the main thread (it sets
 // globalThis.pdfjsWorker on import), so there is no separate worker file to
 // fetch. That keeps the app bundleable into a single self-contained HTML that
-// still parses PDFs, at the cost of a brief pause while a book is read.
-import "pdfjs-dist/legacy/build/pdf.worker.min.mjs";
+// still parses PDFs, at the cost of a brief pause while a book is read. It is
+// the unminified build because patches/pdfjs-dist@*.patch only patches that one.
+import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
 import { generate, type SpellDetail, toMarkdown } from "../src/gen/character.ts";
 import { parseAdventuringItems } from "../src/parse/equipment.ts";

@@ -76,8 +76,8 @@ cells split on 2+ spaces, columns are read by x-offset, and lines align by absol
 column position. Keep this contract in mind when touching any parser.
 
 Headings are not always all caps in the text. A PDF can set them in a caps-only
-font but store mixed case (pdftotext: `Stone Sense`) or random case with wide
-gaps (pdf.js: `stOne   SenSe`). `src/parse/heading.ts` reads such lines by shape
+font but store mixed case (`Stone Sense`), or, read without its /ActualText,
+random case with wide gaps (`stOne   SenSe`). `src/parse/heading.ts` reads such lines by shape
 and normalises the name. The spell and trait parsers try all caps first and use
 it as the fallback.
 
@@ -85,19 +85,30 @@ There are two producers of that fixed-width text, both feeding the _same_ parser
 
 - **CLI**: `src/pdf/extract.ts` shells out to `pdftotext` (poppler), cached locally by
   file size + mtime in `~/.cache/dw/`.
-- **Browser**: `src/pdf/emulate.ts` runs pdf.js, takes positioned text items, and
-  re-grids them onto a monospace character canvas to reproduce the `pdftotext -layout`
-  layout. This is what lets the web app parse a PDF entirely client-side with the same
+- **Browser**: `src/pdf/emulate.ts` runs pdf.js and splits its text items into
+  glyphs. `src/pdf/layout.ts` lays the glyphs out with a port of poppler 24.02's
+  `pdftotext -layout` rules (words, blocks, lines, character columns, dump order).
+  This is what lets the web app parse a PDF entirely client-side with the same
   parsers, so the book never leaves the machine.
 
-Because the browser path shares the parsers, **`src/pdf/columns.ts` is pure (no Node
-APIs)** and runs unchanged in the browser. Do not introduce Node-only APIs there or in
+The two paths are meant to give byte-identical text. Stock pdf.js hides what the
+port needs, so `patches/pdfjs-dist@*.patch` (applied by `bun install` through
+`patchedDependencies`) adds three things to its text content: each span's
+/ActualText, each item's per-glyph positions (`glyphs`), and each font's descriptor
+/Ascent and /Descent. The patch covers the unminified `pdf.worker.mjs` builds only,
+so `web/main.ts` imports that file. Bump the patch file name when pdfjs-dist is
+upgraded. Known gaps: rotated text is dropped, and a few exact float ties can order
+lines differently from poppler. `layoutBlocks` returns the blocks for comparing with
+`pdftotext -bbox-layout` when a page differs.
+
+Because the browser path shares the parsers, **`src/pdf/columns.ts` and
+`src/pdf/layout.ts` are pure (no Node APIs)** and run unchanged in the browser. Do not introduce Node-only APIs there or in
 `src/parse/*` if the code is meant to run in the web build. The only Node-specific PDF
 code lives in `extract.ts`, `outline.ts` (mutool), and `open.ts` (pdftoppm).
 
 `proto/layout-check.ts` and `proto/diag.ts` are dev tools that diff the two renderers'
-output against the real Player's Book — run them when changing `emulate.ts` or the
-column logic. They need a configured PDF and print a pass/fail on parser-output
+output against the real Player's Book — run them when changing `emulate.ts`,
+`layout.ts`, the pdf.js patch, or the column logic. They need a configured PDF and print a pass/fail on parser-output
 equality (the real success metric, not per-page text similarity).
 
 ### Control flow

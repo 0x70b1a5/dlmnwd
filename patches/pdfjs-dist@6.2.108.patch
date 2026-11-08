@@ -1,0 +1,234 @@
+diff --git a/build/pdf.worker.mjs b/build/pdf.worker.mjs
+index 66ae0d0b2282d6763eaa00b53983964e07b295dd..7621aefa6d0a8f119d3cb5fad05a6e3552873eb9 100644
+--- a/build/pdf.worker.mjs
++++ b/build/pdf.worker.mjs
+@@ -27017,6 +27017,8 @@ class Font {
+     this.capHeight = properties.capHeight / PDF_GLYPH_SPACE_UNITS;
+     this.ascent = properties.ascent / PDF_GLYPH_SPACE_UNITS;
+     this.descent = properties.descent / PDF_GLYPH_SPACE_UNITS;
++    this.descriptorAscent = properties.descriptorAscent;
++    this.descriptorDescent = properties.descriptorDescent;
+     this.lineHeight = this.ascent - this.descent;
+     this.fontMatrix = properties.fontMatrix;
+     this.bbox = properties.bbox;
+@@ -35726,7 +35728,8 @@ class PartialEvaluator {
+       notASpace: -Infinity,
+       transform: null,
+       fontName: null,
+-      hasEOL: false
++      hasEOL: false,
++      glyphs: []
+     };
+     const twoLastChars = [" ", " "];
+     let twoLastCharsPos = 0;
+@@ -35800,6 +35803,8 @@ class PartialEvaluator {
+           fontFamily: font.fallbackName,
+           ascent: font.ascent,
+           descent: font.descent,
++          descriptorAscent: font.descriptorAscent,
++          descriptorDescent: font.descriptorDescent,
+           vertical: font.vertical
+         };
+         if (self.options.fontExtraProperties && font.systemFontInfo) {
+@@ -35866,7 +35871,8 @@ class PartialEvaluator {
+         height: Math.abs(textChunk.totalHeight),
+         transform: textChunk.transform,
+         fontName: textChunk.fontName,
+-        hasEOL: textChunk.hasEOL
++        hasEOL: textChunk.hasEOL,
++        glyphs: textChunk.glyphs.slice()
+       };
+     }
+     async function handleSetFont(fontName, fontRef) {
+@@ -36046,6 +36052,13 @@ class PartialEvaluator {
+           originalCharCode
+         } = glyph;
+         if (category.isInvisibleFormatMark) {
++          if (!font.vertical) {
++            ensureTextContentItem().glyphs.push({
++              unicode: glyph.unicode,
++              x: getCurrentTextTransform()[4],
++              width: 0
++            });
++          }
+           continue;
+         }
+         let charSpacing = baseCharSpacing + (i + 1 === ii ? extraSpacing : 0);
+@@ -36058,6 +36071,14 @@ class PartialEvaluator {
+           charSpacing += textState.wordSpacing;
+         }
+         if (!keepWhiteSpace && category.isWhitespace) {
++          if (!font.vertical) {
++            ensureTextContentItem().glyphs.push({
++              unicode: glyph.unicode,
++              x: getCurrentTextTransform()[4],
++              width: scaledDim * textState.textHScale * textContentItem.textAdvanceScale,
++              advance: (scaledDim + (originalCharCode === 0x20 ? textState.wordSpacing : 0)) * textState.textHScale * textContentItem.textAdvanceScale
++            });
++          }
+           if (!font.vertical) {
+             charSpacing += scaledDim;
+             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
+@@ -36082,6 +36103,12 @@ class PartialEvaluator {
+         }
+         if (!font.vertical) {
+           scaledDim *= textState.textHScale;
++          textChunk.glyphs.push({
++            unicode: glyph.unicode,
++            x: getCurrentTextTransform()[4],
++            width: scaledDim * textChunk.textAdvanceScale,
++            advance: (scaledDim + (originalCharCode === 0x20 ? textState.wordSpacing * textState.textHScale : 0)) * textChunk.textAdvanceScale
++          });
+           intersector?.addGlyph(getCurrentTextTransform(), scaledDim, 0, glyph.unicode);
+           textState.translateTextMatrix(scaledDim, 0);
+           textChunk.width += scaledDim;
+@@ -36167,6 +36194,7 @@ class PartialEvaluator {
+       textContent.items.push(runBidiTransform(textContentItem));
+       textContentItem.initialized = false;
+       textContentItem.str.length = 0;
++      textContentItem.glyphs.length = 0;
+     }
+     function enqueueChunk(batch = false) {
+       const length = textContent.items.length;
+@@ -36451,10 +36479,14 @@ class PartialEvaluator {
+             if (includeMarkedContent) {
+               markedContentData.level++;
+               const mcid = args[1] instanceof Dict ? args[1].get("MCID") : null;
++              const actualText = args[1] instanceof Dict ? args[1].get("ActualText") : null;
+               textContent.items.push({
+                 type: "beginMarkedContentProps",
+                 id: Number.isInteger(mcid) ? `${self.idFactory.getPageObjId()}_mc${mcid}` : null,
+-                tag: args[0] instanceof Name ? args[0].name : null
++                tag: args[0] instanceof Name ? args[0].name : null,
++                ...(typeof actualText === "string" ? {
++                  actualText: stringToPDFString(actualText)
++                } : {})
+               });
+             }
+             break;
+@@ -37311,6 +37343,8 @@ class PartialEvaluator {
+       bbox,
+       ascent,
+       descent,
++      descriptorAscent: ascent,
++      descriptorDescent: descent,
+       xHeight,
+       capHeight,
+       flags,
+diff --git a/legacy/build/pdf.worker.mjs b/legacy/build/pdf.worker.mjs
+index ff381bb9b154685f8ed641b6c1adabb4c732e1f3..f9b88c6967a37dfe0f8f58979637e6cdc6923c1a 100644
+--- a/legacy/build/pdf.worker.mjs
++++ b/legacy/build/pdf.worker.mjs
+@@ -32830,6 +32830,8 @@ class Font {
+     this.capHeight = properties.capHeight / PDF_GLYPH_SPACE_UNITS;
+     this.ascent = properties.ascent / PDF_GLYPH_SPACE_UNITS;
+     this.descent = properties.descent / PDF_GLYPH_SPACE_UNITS;
++    this.descriptorAscent = properties.descriptorAscent;
++    this.descriptorDescent = properties.descriptorDescent;
+     this.lineHeight = this.ascent - this.descent;
+     this.fontMatrix = properties.fontMatrix;
+     this.bbox = properties.bbox;
+@@ -41615,7 +41617,8 @@ class PartialEvaluator {
+       notASpace: -Infinity,
+       transform: null,
+       fontName: null,
+-      hasEOL: false
++      hasEOL: false,
++      glyphs: []
+     };
+     const twoLastChars = [" ", " "];
+     let twoLastCharsPos = 0;
+@@ -41689,6 +41692,8 @@ class PartialEvaluator {
+           fontFamily: font.fallbackName,
+           ascent: font.ascent,
+           descent: font.descent,
++          descriptorAscent: font.descriptorAscent,
++          descriptorDescent: font.descriptorDescent,
+           vertical: font.vertical
+         };
+         if (self.options.fontExtraProperties && font.systemFontInfo) {
+@@ -41755,7 +41760,8 @@ class PartialEvaluator {
+         height: Math.abs(textChunk.totalHeight),
+         transform: textChunk.transform,
+         fontName: textChunk.fontName,
+-        hasEOL: textChunk.hasEOL
++        hasEOL: textChunk.hasEOL,
++        glyphs: textChunk.glyphs.slice()
+       };
+     }
+     async function handleSetFont(fontName, fontRef) {
+@@ -41935,6 +41941,13 @@ class PartialEvaluator {
+           originalCharCode
+         } = glyph;
+         if (category.isInvisibleFormatMark) {
++          if (!font.vertical) {
++            ensureTextContentItem().glyphs.push({
++              unicode: glyph.unicode,
++              x: getCurrentTextTransform()[4],
++              width: 0
++            });
++          }
+           continue;
+         }
+         let charSpacing = baseCharSpacing + (i + 1 === ii ? extraSpacing : 0);
+@@ -41947,6 +41960,14 @@ class PartialEvaluator {
+           charSpacing += textState.wordSpacing;
+         }
+         if (!keepWhiteSpace && category.isWhitespace) {
++          if (!font.vertical) {
++            ensureTextContentItem().glyphs.push({
++              unicode: glyph.unicode,
++              x: getCurrentTextTransform()[4],
++              width: scaledDim * textState.textHScale * textContentItem.textAdvanceScale,
++              advance: (scaledDim + (originalCharCode === 0x20 ? textState.wordSpacing : 0)) * textState.textHScale * textContentItem.textAdvanceScale
++            });
++          }
+           if (!font.vertical) {
+             charSpacing += scaledDim;
+             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
+@@ -41971,6 +41992,12 @@ class PartialEvaluator {
+         }
+         if (!font.vertical) {
+           scaledDim *= textState.textHScale;
++          textChunk.glyphs.push({
++            unicode: glyph.unicode,
++            x: getCurrentTextTransform()[4],
++            width: scaledDim * textChunk.textAdvanceScale,
++            advance: (scaledDim + (originalCharCode === 0x20 ? textState.wordSpacing * textState.textHScale : 0)) * textChunk.textAdvanceScale
++          });
+           intersector?.addGlyph(getCurrentTextTransform(), scaledDim, 0, glyph.unicode);
+           textState.translateTextMatrix(scaledDim, 0);
+           textChunk.width += scaledDim;
+@@ -42056,6 +42083,7 @@ class PartialEvaluator {
+       textContent.items.push(runBidiTransform(textContentItem));
+       textContentItem.initialized = false;
+       textContentItem.str.length = 0;
++      textContentItem.glyphs.length = 0;
+     }
+     function enqueueChunk(batch = false) {
+       const length = textContent.items.length;
+@@ -42340,10 +42368,14 @@ class PartialEvaluator {
+             if (includeMarkedContent) {
+               markedContentData.level++;
+               const mcid = args[1] instanceof Dict ? args[1].get("MCID") : null;
++              const actualText = args[1] instanceof Dict ? args[1].get("ActualText") : null;
+               textContent.items.push({
+                 type: "beginMarkedContentProps",
+                 id: Number.isInteger(mcid) ? `${self.idFactory.getPageObjId()}_mc${mcid}` : null,
+-                tag: args[0] instanceof Name ? args[0].name : null
++                tag: args[0] instanceof Name ? args[0].name : null,
++                ...(typeof actualText === "string" ? {
++                  actualText: stringToPDFString(actualText)
++                } : {})
+               });
+             }
+             break;
+@@ -43200,6 +43232,8 @@ class PartialEvaluator {
+       bbox,
+       ascent,
+       descent,
++      descriptorAscent: ascent,
++      descriptorDescent: descent,
+       xHeight,
+       capHeight,
+       flags,
