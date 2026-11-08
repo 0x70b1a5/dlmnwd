@@ -188,6 +188,29 @@ test("parses starting equipment with armour, weapons, and class items", () => {
   expect(se.classItems).toEqual(["Shield"]);
 });
 
+test("joins hyphenated items and stops at the next heading in any case", () => {
+  const page = [
+    ...equipPage.split("\n").slice(0, 9),
+    at([[50, "Starting Equipment"]]),
+    at([[50, "Armour (roll 1d6): 1. Quilted. 2. Ring-"]]),
+    at([[50, "mail. 3. Scale."]]),
+    at([[50, "Weapons (roll 1d6): 1. Sword. 2. Bow + 9"]]),
+    at([[50, "arrows (sling for Small char-"]]),
+    at([[50, "acters). 3. Axe."]]),
+    at([[50, "71"]]),
+    // The next section's heading, stored in mixed case, then its prose.
+    at([[50, "Faithful Hound"]]),
+    at([[50, "An invented companion that must not join the list."]]),
+  ].join("\n");
+  const se = parseClasses([page])[0].startingEquipment!;
+  expect(se.armour.map((a) => a.item)).toEqual(["Quilted", "Ringmail", "Scale"]);
+  expect(se.weapons.map((w) => w.item)).toEqual([
+    "Sword",
+    "Bow + 9 arrows (sling for Small characters)",
+    "Axe",
+  ]);
+});
+
 // A magician page with Starting Spell Books in the right column.
 const magicianPage = [
   "Magician",

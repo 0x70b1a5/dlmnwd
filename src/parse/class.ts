@@ -1,3 +1,4 @@
+import { headingText, isHeadingShape } from "./heading.ts";
 import { splitProseColumns, splitTwoColumns } from "../pdf/columns.ts";
 import { extractTraits, type Trait } from "./traits.ts";
 
@@ -418,12 +419,19 @@ function parseStartingEquipment(page: string): StartingEquipment | null {
         continue;
       }
       blanks = 0;
+      if (/^\d{1,3}$/.test(t)) continue; // a page number
       // Stop at a new section heading (ALL-CAPS, not a d6 option).
       if (/^[A-Z][A-Z ]{8,}$/.test(t) && !/^\d/.test(t)) break;
+      // A heading in any case (a caps-only font, see heading.ts) after a
+      // finished entry also starts the next section.
+      if ((textParts.at(-1) ?? "").endsWith(".") && isHeadingShape(headingText(t), 4, 30)) break;
       textParts.push(t);
     }
     if (textParts.length === 0) continue;
-    const text = textParts.join(" ");
+    // Rejoin words hyphenated across lines ("Chain-" + "mail").
+    const text = textParts.reduce((acc, part) =>
+      /[a-z]-$/.test(acc) ? acc.slice(0, -1) + part : `${acc} ${part}`,
+    );
 
     const weapons = parseEquipmentTable(text, "Weapons");
     const result: StartingEquipment = {
