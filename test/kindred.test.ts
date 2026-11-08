@@ -267,6 +267,36 @@ test("leaves a note under the trinket table out of the entries", () => {
   ]);
 });
 
+test("splits name cells that sit one space apart", () => {
+  // Three columns at 25, 37 and 49. A long name pushes the next one a
+  // character left (row 3) or three (row 4), leaving a single space.
+  const row = (n: string, a: string, b: string, c: string, bx = 37): string =>
+    at([
+      [20, n],
+      [25, a],
+      [bx, b],
+      [49, c],
+    ]);
+  const page = [
+    at([[40, "TESTKIN NAMES"]]),
+    at([
+      [20, "d20 Elder"],
+      [37, "Younger"],
+      [49, "Surname"],
+    ]),
+    row("1", "Quillsby", "Pim", "Marrowtwist"),
+    row("2", "Snodgill", "Tansy", "Brimblecote"),
+    row("3", "Wimblefort", "Ode", "Mallowmere", 36),
+    row("4", "Brackenb", "Oz", "Thrumwick", 34),
+    row("5", "Wendle", "Nib", "Pottage"),
+  ].join("\n");
+  const [k] = parseKindreds([page], [{ id: "testkin", name: "Testkin", kindredType: "Mortal" }]);
+  expect(k.nameColumns).toEqual(["Elder", "Younger", "Surname"]);
+  expect(k.nameRows[2]).toEqual(["Wimblefort", "Ode", "Mallowmere"]);
+  expect(k.nameRows[3]).toEqual(["Brackenb", "Oz", "Thrumwick"]);
+  expect(k.nameRows[4]).toEqual(["Wendle", "Nib", "Pottage"]);
+});
+
 test("trinkets is empty when no trinket table is present", () => {
   const [k] = parseKindreds(
     [namesPage, personaPage],

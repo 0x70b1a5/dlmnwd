@@ -258,8 +258,13 @@ function parseNameTable(page: string, upperName: string): { columns: string[]; r
   const scattered: number[] = []; // rows whose values landed on later, number-less lines
   const orphans: string[][] = columns.map(() => []); // stray values, bucketed by column
   let blanks = 0;
+  // Rows whose cells ran together (fewer cells than columns), split at the end
+  // by where the complete rows' cells start.
+  const short: { row: number; line: string; from: number }[] = [];
+  const starts: number[][] = columns.map(() => []);
   for (let i = headerIdx + 1; i < lines.length && rows.length < 30; i++) {
     let region = lines[i].slice(start);
+    let offset = start;
     if (region.trim() === "") {
       if (++blanks >= 4 && rows.length > 0) break;
       continue;
@@ -271,12 +276,22 @@ function parseNameTable(page: string, upperName: string): { columns: string[]; r
     const roll = region.match(/\d{1,2}(?=\s{2,}\S)/);
     if (roll && (roll.index ?? 0) > 0 && !/\d/.test(region.slice(0, roll.index))) {
       region = region.slice(roll.index);
+      offset += roll.index ?? 0;
     }
     if (/^\s*\d/.test(region)) {
       blanks = 0;
       const parts = region.trim().split(/\s{2,}/);
       parts.shift(); // drop the roll number
-      if (parts.length > 0) {
+      if (parts.length > 0 && parts.length < columns.length) {
+        // A long name can sit one space from the next column's name, so two
+        // cells read as one. Split the row once the column starts are known.
+        short.push({ row: rows.length, line: region, from: offset });
+        rows.push(parts.map((p) => p.trim()));
+      } else if (parts.length > 0) {
+        if (parts.length === columns.length) {
+          const found = [...region.matchAll(/\S+(?: \S+)*/g)].slice(1); // after the roll
+          found.forEach((m, c) => starts[c].push(offset + (m.index ?? 0)));
+        }
         rows.push(parts.map((p) => p.trim()));
       } else {
         rows.push(columns.map(() => "")); // a roll number with its values scattered below
@@ -297,6 +312,12 @@ function parseNameTable(page: string, upperName: string): { columns: string[]; r
     }
   }
 
+  if (short.length > 0 && starts.every((xs) => xs.length > 0)) {
+    // Each column's usual start: the one its complete rows share most.
+    const colStart = starts.map(mostCommon);
+    for (const { row, line, from } of short) rows[row] = cellsAt(line, from, colStart);
+  }
+
   // Fill scattered rows from the orphan buckets, in order, per column.
   for (let ci = 0; ci < columns.length; ci++) {
     let oi = 0;
@@ -313,6 +334,36 @@ function cells(line: string): string[] {
     .split(/\s{2,}/)
     .map((c) => c.trim())
     .filter(Boolean);
+}
+
+/** A table row's cells by column start: a word at or past a column's start
+ *  (less two characters, as a long name in the column before can push it left)
+ *  goes in that column. `from` is the x-offset where `line` begins. Only for a
+ *  row with fewer cells than columns. */
+function cellsAt(line: string, from: number, colStart: number[]): string[] {
+  const out = colStart.map(() => "");
+  for (const m of line.matchAll(/\S+/g)) {
+    const x = from + (m.index ?? 0);
+    const col = colStart.findLastIndex((cx) => x >= cx - 2);
+    if (col < 0) continue; // the roll number
+    out[col] = out[col] ? `${out[col]} ${m[0]}` : m[0];
+  }
+  // A name pushed further left still reads as part of the cell before. The
+  // row is short by a cell, so an empty column takes that cell's last word.
+  for (let c = 1; c < out.length; c++) {
+    const words = out[c - 1].split(" ");
+    if (out[c] === "" && words.length > 1) {
+      out[c] = words.pop()!;
+      out[c - 1] = words.join(" ");
+    }
+  }
+  return out;
+}
+
+function mostCommon(xs: number[]): number {
+  const counts = new Map<number, number>();
+  for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1);
+  return [...counts].toSorted((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
 }
 
 function nearestColumn(colX: number[], x: number): number {
