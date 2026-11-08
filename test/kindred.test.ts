@@ -23,13 +23,13 @@ const namesPage = [
   ]),
   at([
     [20, "1"],
-    [25, "Boots"],
-    [44, "Bobblewhisk"],
+    [25, "Quillsby"],
+    [44, "Marrowtwist"],
   ]),
   at([
     [20, "2"],
-    [25, "Fripple"],
-    [44, "Cottonsocks"],
+    [25, "Snodgill"],
+    [44, "Brimblecote"],
   ]),
   at([[20, "3"]]), // roll number; its values were pushed onto the next lines
   at([[25, "Felix"]]),
@@ -109,8 +109,8 @@ const bleedPage = [
   ]),
   at([
     [20, "1"],
-    [25, "Boots"],
-    [44, "Bobblewhisk"],
+    [25, "Quillsby"],
+    [44, "Marrowtwist"],
   ]),
   at([
     [0, "Prose bleeds to col"], // 19 chars: reaches one past the table's start cut
@@ -130,7 +130,7 @@ test("recovers a names row whose facing prose bleeds past the table edge", () =>
     [bleedPage],
     [{ id: "bleedkin", name: "Bleedkin", kindredType: "Mortal" }],
   );
-  expect(k.nameRows).toContainEqual(["Boots", "Bobblewhisk"]);
+  expect(k.nameRows).toContainEqual(["Quillsby", "Marrowtwist"]);
   expect(k.nameRows).toContainEqual(["Cane", "Cobble"]); // would be lost without the strip
   expect(k.nameRows).toContainEqual(["Felix", "Fang"]);
   expect(k.nameRows.length).toBe(3);
@@ -161,7 +161,7 @@ const traitSection = [
     [0, "1  Bod"],
     [20, "Hill"],
   ]),
-  at([[50, "WHISKERS"]]),
+  at([[50, "TUFTING"]]),
   at([[50, "d12 Whisker Style"]]),
   at([[50, "1   Bushy"]]),
 ].join("\n");
@@ -173,8 +173,8 @@ test("parses kindred trait names and descriptions, ignoring roll tables", () => 
   );
   expect(k.traits.map((t) => t.name)).toEqual(["Stone Sense", "Tunnel Vision"]);
   expect(k.traits[0].text).toBe("A sample-folk always knows which way is down.");
-  // "WHISKERS" heads a d12 appearance table, not a trait, so it is dropped.
-  expect(k.traits.map((t) => t.name)).not.toContain("Whiskers");
+  // "TUFTING" heads a d12 appearance table, not a trait, so it is dropped.
+  expect(k.traits.map((t) => t.name)).not.toContain("Tufting");
 });
 
 test("parses languages, names, scattered rows, and persona", () => {
@@ -188,7 +188,7 @@ test("parses languages, names, scattered rows, and persona", () => {
   expect(k.id).toBe("testkin");
   expect(k.nativeLanguages).toEqual(["Sample-Tongue", "Bramblespeak"]);
   expect(k.nameColumns).toEqual(["First Name", "Surname"]);
-  expect(k.nameRows).toContainEqual(["Boots", "Bobblewhisk"]);
+  expect(k.nameRows).toContainEqual(["Quillsby", "Marrowtwist"]);
   expect(k.nameRows).toContainEqual(["Felix", "Fang"]); // reassembled from scattered lines
   expect(k.nameRows.length).toBe(3);
   expect(k.persona.demeanour).toEqual(["Sly", "Bold"]);

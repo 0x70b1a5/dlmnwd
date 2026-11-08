@@ -33,7 +33,7 @@ export function parseGlamoursTable(pages: string[]): string[] {
       const line = lines[i].trim();
       if (line === "") break;
 
-      // Entries: "1   Awe   8   Fairy Dust   15   Seeming"
+      // Entries: "1   Aurora   8   Mistveil   15   Umbermeld"
       // Split on 2+ spaces, then walk pairs of (number, name).
       const parts = line.split(/\s{2,}/);
       for (let j = 0; j < parts.length; j += 1) {

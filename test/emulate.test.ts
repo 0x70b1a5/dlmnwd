@@ -28,20 +28,20 @@ test("collapses a within-word kerning split into one token", () => {
 test("preserves a 2+ space gap between distant columns", () => {
   // A roll number and its value sit far apart; the gap must survive so a
   // downstream split(/\s{2,}/) sees two cells.
-  const out = layoutPage([item("1", 0, 100), item("Boots", 60, 100)]);
-  expect(out.split(/\s{2,}/)).toEqual(["1", "Boots"]);
+  const out = layoutPage([item("1", 0, 100), item("Pimby", 60, 100)]);
+  expect(out.split(/\s{2,}/)).toEqual(["1", "Pimby"]);
 });
 
 test("keeps columns vertically aligned across rows", () => {
   // Same x on two rows must map to the same character column.
   const out = layoutPage([
     item("1", 0, 100),
-    item("Boots", 60, 100),
+    item("Pimby", 60, 100),
     item("2", 0, 80),
     item("Cane", 60, 80),
   ]);
   const [r1, r2] = out.split("\n");
-  expect(r1.indexOf("Boots")).toBe(r2.indexOf("Cane"));
+  expect(r1.indexOf("Pimby")).toBe(r2.indexOf("Cane"));
 });
 
 test("clusters items into lines by baseline y", () => {
