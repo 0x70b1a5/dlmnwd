@@ -395,7 +395,7 @@ test("imports a filled-in sheet's fields", () => {
       "Glamours: shimmer veil, Hush\r\nRune: Mote of dew\r\nAge: 40\r\nKnack: Lamp-wise",
   };
   const r = rules();
-  const { pc, messages, encumbrance } = pcFromSheet(fields, r);
+  const { pc, messages, unknownItems, encumbrance } = pcFromSheet(fields, r);
   expect(pc).toMatchObject({
     name: "Brindle Oakhew",
     kindred: "wisp",
@@ -423,6 +423,8 @@ test("imports a filled-in sheet's fields", () => {
   ]);
   expect(messages.some((m) => /Bulwark: sheet says 0/.test(m))).toBe(true);
   expect(messages.some((m) => /Lucky pebble pouch.*isn't in the book/.test(m))).toBe(true);
+  expect(unknownItems).toEqual(["Lucky pebble pouch"]);
+  expect(messages.some((m) => m.includes("dw "))).toBe(false); // no CLI commands in shared text
   expect(encumbrance).toBe("slots");
   // Sheet AC 14 = hide 11 + bulwark 1 + DEX 1 + a standing +1.
   expect(pc.acBonus).toBe(1);

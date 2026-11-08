@@ -20,8 +20,11 @@ const ABILITY_FIELD: Record<Ability, string> = {
 
 export interface ImportResult {
   pc: PC;
-  /** Things worth telling the user: unknown items, weight disagreements, … */
+  /** Things worth telling the user: unknown items, weight disagreements, …
+   *  Plain statements; each front end says how to fix them its own way. */
   messages: string[];
+  /** Items the book's equipment lists don't have, as written on the sheet. */
+  unknownItems: string[];
   /** The encumbrance method ticked on the sheet, if any. */
   encumbrance?: EncMethod;
 }
@@ -63,6 +66,7 @@ function list(s: string): string[] {
 
 export function pcFromSheet(f: Record<string, string>, rules: PartyRules): ImportResult {
   const messages: string[] = [];
+  const unknownItems: string[] = [];
   const pc = blankPc(clean(f["Name"]) || "(unnamed)");
 
   // Kindred and class: from the "Kindred & Class" box, else the trait headings.
@@ -77,8 +81,8 @@ export function pcFromSheet(f: Record<string, string>, rules: PartyRules): Impor
   const klass = findName(kcText, rules.classes);
   pc.kindred = kindred?.id ?? "";
   pc.class = klass?.id ?? "";
-  if (!kindred) messages.push("kindred not recognised; set it with: dw pc <name> set kindred=<id>");
-  if (!klass) messages.push("class not recognised; set it with: dw pc <name> set class=<id>");
+  if (!kindred) messages.push("kindred not recognised");
+  if (!klass) messages.push("class not recognised");
 
   pc.background = clean(f["Background"]);
   pc.alignment = clean(f["Alignment"]);
@@ -127,9 +131,9 @@ export function pcFromSheet(f: Record<string, string>, rules: PartyRules): Impor
         inv.weight = sheetWeight ? Math.round(int(sheetWeight) / inv.qty) : 0;
         messages.push(
           `"${text}" isn't in the book's equipment lists; weight ${inv.weight * inv.qty}` +
-            (sheetWeight ? " (from the sheet)" : "") +
-            `. Fix with: dw pc ${firstName(pc)} item set "${text}" weight=N`,
+            (sheetWeight ? " (from the sheet)" : ""),
         );
+        unknownItems.push(text);
       } else if (sheetWeight && int(sheetWeight) !== inv.weight * inv.qty) {
         messages.push(
           `${text}: sheet says ${int(sheetWeight)}, book lists ${resolved.item.name} at ${inv.weight * inv.qty}; using the book`,
@@ -202,7 +206,7 @@ export function pcFromSheet(f: Record<string, string>, rules: PartyRules): Impor
   const slotOn = /^(?!off$).+/i.test(clean(f["Slot Encumbrance"]));
   const encumbrance: EncMethod | undefined =
     weightOn && !slotOn ? "weight" : slotOn && !weightOn ? "slots" : undefined;
-  return { pc, messages, encumbrance };
+  return { pc, messages, unknownItems, encumbrance };
 }
 
 export function firstName(pc: PC): string {

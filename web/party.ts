@@ -12,9 +12,12 @@ import {
   gainsRunesOnLevel,
   learnName,
   type NameList,
+  setField,
 } from "../src/party/actions.ts";
 import { computeAc, describeLoad } from "../src/party/encumbrance.ts";
 import { characterToPc } from "../src/party/from-character.ts";
+import { type ImportResult, pcFromSheet } from "../src/party/import.ts";
+import { readFormFields } from "../src/pdf/fields.ts";
 import { addItem, makeItem, removeItem } from "../src/party/items.ts";
 import {
   COIN_KINDS,
@@ -58,7 +61,8 @@ export interface PartyView {
   select(name: string): void;
 }
 
-type Message = { text: string; kind: "info" | "error" };
+/** A note under the party bar; `details` lists what a change found on the way. */
+type Message = { text: string; kind: "info" | "error"; details?: string[] };
 
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -93,15 +97,20 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
 
   /** Run a change, save, and show its message (or its error). A change that
    *  fails is rolled back, so a half-made change never stays. */
-  function act(change: () => string | void): void {
+  function act(change: () => string | Message | void): void {
     const before = JSON.stringify(party);
     const wasSelected = selected;
     try {
-      const text = change();
-      history.push({ label: text || "the last change", party: before, selected: wasSelected });
+      const said = change();
+      const note = typeof said === "string" ? { text: said, kind: "info" as const } : said;
+      history.push({
+        label: note?.text || "the last change",
+        party: before,
+        selected: wasSelected,
+      });
       if (history.length > HISTORY) history.shift();
       storedOk = storeParty(party);
-      message = text ? { text, kind: "info" } : null;
+      message = note?.text ? note : null;
     } catch (err) {
       party = normalizeParty(JSON.parse(before), "The party");
       selected = wasSelected;
@@ -157,8 +166,84 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     return h(
       "div",
       { class: "party-notes", role: "status", "aria-live": "polite" },
-      ...notes.map((n) => h("p", { class: "status", "data-kind": n.kind }, n.text)),
+      ...notes.flatMap((n) => [
+        h("p", { class: "status", "data-kind": n.kind }, n.text),
+        n.details?.length
+          ? h("ul", { class: "plain status-details" }, ...n.details.map((d) => h("li", {}, d)))
+          : null,
+      ]),
     );
+  }
+
+  /** Add members from filled-in fillable character sheets (`dw party import`).
+   *  The PDFs are read here, in the browser, and go nowhere. */
+  async function importSheets(files: File[]): Promise<void> {
+    message = { text: `Reading ${plural(files.length, "sheet")}…`, kind: "info" };
+    render();
+    type Sheet = { file: string; error?: string } & Partial<ImportResult>;
+    const results: Sheet[] = await Promise.all(
+      files.map(async (f): Promise<Sheet> => {
+        try {
+          const fields = await readFormFields(new Uint8Array(await f.arrayBuffer()));
+          if (Object.keys(fields).length === 0)
+            return { file: f.name, error: "no form fields found. Is it a fillable sheet?" };
+          return { file: f.name, ...pcFromSheet(fields, rules) };
+        } catch (err) {
+          return { file: f.name, error: (err as Error).message };
+        }
+      }),
+    );
+    // Ask about name clashes now: a confirm inside act() would block mid-change.
+    const replace = new Set<string>();
+    for (const r of results)
+      if (r.pc) {
+        const name = r.pc.name.toLowerCase();
+        if (
+          party.members.some((m) => m.name.toLowerCase() === name) &&
+          confirm(`${r.pc.name} is already in the party. Replace them with ${r.file}?`)
+        )
+          replace.add(name);
+      }
+    act(() => {
+      const details: string[] = [];
+      let added = 0;
+      for (const r of results) {
+        const { pc, messages = [], unknownItems = [], encumbrance } = r;
+        if (!pc) {
+          details.push(`${r.file}: ${r.error ?? "it could not be read."}`);
+          continue;
+        }
+        const at = party.members.findIndex((m) => m.name.toLowerCase() === pc.name.toLowerCase());
+        if (at >= 0 && !replace.has(pc.name.toLowerCase())) {
+          details.push(`${pc.name} is already in the party; ${r.file} was not imported.`);
+          continue;
+        }
+        if (at >= 0) party.members[at] = pc;
+        else party.members.push(pc);
+        if (encumbrance && party.members.length === 1) party.encumbrance = encumbrance;
+        selected = party.members.indexOf(pc);
+        added++;
+        details.push(
+          `${at >= 0 ? "Replaced" : "Added"} ${pc.name} (level ${pc.level}, ${plural(pc.items.length, "item")}) from ${r.file}.`,
+        );
+        for (const m of messages) details.push(`${pc.name}: ${m}`);
+        const unset = [!pc.kindred && "kindred", !pc.class && "class"].filter(Boolean);
+        if (unset.length > 0 && rules.classes.length > 0)
+          details.push(`${pc.name}: choose the ${unset.join(" and ")} under Character.`);
+        if (unknownItems.length > 0)
+          details.push(`${pc.name}: set the weight of items the book doesn't list under Gear.`);
+        for (const p of loadOf(pc, party, rules).problems) details.push(`${pc.name}: ${p}`);
+      }
+      if (rules.classes.length === 0 && added > 0)
+        details.push(
+          "Load your Player's Book, then import again, to read kindreds, classes and item weights.",
+        );
+      return {
+        text: `Imported ${plural(added, "character")} from ${plural(files.length, "sheet")}.`,
+        kind: added > 0 ? "info" : "error",
+        details,
+      };
+    });
   }
 
   // ── the whole party ──────────────────────────────────────────────────────
@@ -200,11 +285,32 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       button("Award", null, "btn", "submit"),
     );
 
-    const file = h("input", { type: "file", accept: "application/json,.json", hidden: "" });
+    const file = h("input", {
+      type: "file",
+      accept: "application/json,.json,application/pdf,.pdf",
+      multiple: "",
+      hidden: "",
+    });
     file.addEventListener("change", () => {
-      const f = (file as HTMLInputElement).files?.[0];
+      const files = [...((file as HTMLInputElement).files ?? [])];
       (file as HTMLInputElement).value = "";
-      if (!f) return;
+      if (files.length === 0) return;
+      const sheets = files.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+      if (sheets.length > 0) {
+        if (sheets.length < files.length) {
+          message = { text: "Import one party.json, or one or more sheet PDFs.", kind: "error" };
+          render();
+          return;
+        }
+        void importSheets(sheets);
+        return;
+      }
+      if (files.length > 1) {
+        message = { text: "Import one party.json at a time.", kind: "error" };
+        render();
+        return;
+      }
+      const f = files[0];
       void readPartyFile(f).then(
         (p) => {
           if (party.members.length > 0 && !confirm(`Replace the party with ${f.name}?`)) return;
@@ -241,7 +347,13 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         "div",
         { class: "party-bar__group" },
         button("Export", () => download("party.json", partyJson(party), "application/json")),
-        button("Import", () => (file as HTMLInputElement).click()),
+        button(
+          "Import",
+          () => (file as HTMLInputElement).click(),
+          "btn ghost",
+          "button",
+          "Import a party.json or character sheet PDFs",
+        ),
         file,
         undoButton(),
       ),
@@ -910,6 +1022,32 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       pc.status,
       (v) => act(() => void (pc.status = v as PC["status"])),
     );
+    // Kindred and class from the book. A sheet's unrecognised one is fixed here.
+    const choice = (
+      label: string,
+      key: "kindred" | "class",
+      options: { id: string; name: string }[],
+    ): HTMLElement | null => {
+      if (options.length === 0) return null;
+      const known = options.some((o) => o.id === pc[key]);
+      const el = select(
+        [
+          ...(known ? [] : [["", pc[key] || "(not set)"] as [string, string]]),
+          ...options.map((o): [string, string] => [o.id, o.name]),
+        ],
+        known ? pc[key] : "",
+        (v) =>
+          act(() => {
+            if (!v) return;
+            setField(pc, rules, `${key}=${v}`);
+            // A new class re-reads Attack and Saves for the PC's level.
+            if (key === "class") setField(pc, rules, `level=${pc.level}`);
+            return `${pc.name}: ${key} set to ${options.find((o) => o.id === v)?.name ?? v}.`;
+          }),
+      );
+      el.setAttribute("aria-label", label);
+      return h("label", { class: "field" }, h("span", { class: "label" }, label), el);
+    };
     const retainer = h("input", { type: "checkbox" }) as HTMLInputElement;
     retainer.checked = pc.retainer;
     retainer.addEventListener("change", () => act(() => void (pc.retainer = retainer.checked)));
@@ -918,6 +1056,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       { class: "stack" },
       text("Name", "name"),
       text("Player", "player"),
+      choice("Kindred", "kindred", rules.kindreds),
+      choice("Class", "class", rules.classes),
       text("Alignment", "alignment"),
       h("label", { class: "field" }, h("span", { class: "label" }, "Status"), status),
       h(
@@ -963,9 +1103,11 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         n++
       )
         pc.name = `${base} ${n}`;
-      party.members.push(pc);
-      selected = party.members.length - 1;
-      act(() => `Added ${pc.name} to the party.`);
+      act(() => {
+        party.members.push(pc);
+        selected = party.members.length - 1;
+        return `Added ${pc.name} to the party.`;
+      });
       return pc.name;
     },
     select(name) {

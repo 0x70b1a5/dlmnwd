@@ -1180,6 +1180,11 @@ select option:disabled {
   text-transform: none;
   font-family: var(--body);
 }
+.party-notes .status-details {
+  margin: 0.25rem 0 0.5rem 1.1rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
 
 .row {
   display: flex;

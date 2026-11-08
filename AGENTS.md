@@ -192,6 +192,9 @@ reason to exist; never add an upload affordance.
   rules from the saved book (`web/book.ts`). `web/party-store.ts` keeps the
   party in the browser's local storage and exports or imports the CLI's
   `party.json`. An unreadable saved party is copied aside, never overwritten.
+  Import also reads fillable sheet PDFs with the CLI's `src/pdf/fields.ts` and
+  `party/import.ts`. Import messages are plain statements; the CLI and the web
+  app each add their own fix hints (`unknownItems`, an unset kindred or class).
   "View full sheet" shows a member on the Sheet tab: `web/member-sheet.ts`
   turns a member into the `SheetData` that `renderSheetData` draws.
 - `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the

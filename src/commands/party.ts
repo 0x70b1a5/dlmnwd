@@ -4,7 +4,7 @@ import { ensureBuilt } from "../build.ts";
 import { openDb } from "../db.ts";
 import { pdfPath } from "../pdf/config.ts";
 import { readFormFields } from "../pdf/fields.ts";
-import { pcFromSheet } from "../party/import.ts";
+import { firstName, pcFromSheet } from "../party/import.ts";
 import { loadOf, showParty } from "../party/render.ts";
 import { emptyRules, type PartyRules } from "../party/rules.ts";
 import { loadRules } from "../party/rules-db.ts";
@@ -91,7 +91,7 @@ export async function cmdParty(args: string[]): Promise<void> {
           console.error(`${basename(file)}: no form fields found (is it a fillable sheet?)`);
           continue;
         }
-        const { pc, messages, encumbrance } = pcFromSheet(fields, rules);
+        const { pc, messages, unknownItems, encumbrance } = pcFromSheet(fields, rules);
         const existing = party.members.findIndex(
           (m) => m.name.toLowerCase() === pc.name.toLowerCase(),
         );
@@ -107,6 +107,11 @@ export async function cmdParty(args: string[]): Promise<void> {
           `${existing >= 0 ? "Replaced" : "Added"} ${pc.name} (level ${pc.level}, ${pc.items.length} items) from ${basename(file)}`,
         );
         for (const m of messages) console.log(`  · ${m}`);
+        const who = firstName(pc);
+        if (!pc.kindred) console.log(`    Set the kindred with: dw pc ${who} set kindred=<id>`);
+        if (!pc.class) console.log(`    Set the class with: dw pc ${who} set class=<id>`);
+        for (const item of unknownItems)
+          console.log(`    Set a weight with: dw pc ${who} item set "${item}" weight=N`);
         for (const p of load.problems) console.log(`  ⚠ ${p}`);
       }
       saveParty(party);
