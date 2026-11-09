@@ -107,13 +107,19 @@ export function memberSheet(pc: PC, party: Party, rules: PartyRules, book: Book 
         knacks.find((k) => k.name.toLowerCase() === name.toLowerCase()) ?? { name, text: "" },
     ),
     runes: pc.runes.map((r) => {
+      // How often it may be used now, then what it does (the book's entry).
       const st = runeStatus(r, pc, party.day, rules.runes);
+      // Exact name only: a near match would show another rune's text.
+      const entry = rules.runes.runes.find((x) => x.name.toLowerCase() === r.name.toLowerCase());
       const times = r.times > 1 ? ` ×${r.times}` : "";
       const left = st.left === null ? "" : ` ${st.left} of ${st.limit} left.`;
+      const usage = st.band ? `${st.band.text}${times}.${left}` : "";
       return {
         name: r.name,
         tag: r.magnitude || null,
-        text: st.band ? `${st.band.text}${times}.${left}` : "",
+        duration: entry?.duration ?? null,
+        range: entry?.range ?? null,
+        text: [usage, entry?.body].filter((t) => t).join("\n"),
       };
     }),
     notes: pc.notes,

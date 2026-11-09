@@ -2,10 +2,6 @@
 
 import { h } from "./sheet.ts";
 
-export function stat(label: string, value: string): HTMLElement {
-  return h("div", {}, h("dt", {}, label), h("dd", {}, value));
-}
-
 export function block(title: string, body: HTMLElement, size: "wide" | "" = ""): HTMLElement {
   return h(
     "section",

@@ -819,6 +819,8 @@ select option:disabled {
 }
 .cast .cast-body {
   display: block;
+  /* Keep the entry's own line breaks ("Restrictions: …" starts a line). */
+  white-space: pre-line;
 }
 
 /* Compact key/value grid (persona, gear) */
@@ -1274,10 +1276,6 @@ select option:disabled {
 .member__head .sheet-name {
   overflow-wrap: anywhere;
 }
-.member__sub {
-  margin: 0.4rem 0 0;
-  color: var(--ink-soft);
-}
 .member__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
@@ -1304,24 +1302,35 @@ select option:disabled {
   justify-content: space-between;
   gap: 0.6rem 1rem;
 }
+.member__head .sheet-head {
+  margin-bottom: 0;
+}
 .member__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-/* The member's full sheet, under their controls. The party's own table rules
+/* The member's sheet parts around their controls. The party's own table rules
    are for its roster and gear lists; the sheet keeps the sheet's. */
-.member-sheet {
-  padding: 0.9rem 0 0;
-  border-top: 2px solid var(--line);
-}
-.member-sheet table {
+.member-sheet table,
+.member-print table {
   table-layout: fixed;
 }
 .member-sheet th.num,
-.member-sheet td.num {
+.member-sheet td.num,
+.member-print th.num,
+.member-print td.num {
   width: 3.6rem;
   white-space: normal;
+}
+.member-sheet .ability-flow {
+  margin-top: 0;
+  padding-top: 0.9rem;
+  border-top: 2px solid var(--line-soft);
+}
+/* The whole sheet, gear and notes included, is for "Print sheet" only. */
+.member-print {
+  display: none;
 }
 .load-line {
   margin: 0;
@@ -1367,18 +1376,6 @@ ul.chips-list {
   align-items: center;
 }
 
-@container sheet (max-width: 560px) {
-  .member__stats {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .member__stats > div:nth-child(3n) {
-    border-right: 0;
-  }
-  .member__stats > div:nth-child(-n + 3) {
-    border-bottom: 2px solid var(--line);
-  }
-}
-
 @media print {
   .tabs,
   #party-frame {
@@ -1397,14 +1394,16 @@ ul.chips-list {
   }
   body[data-print="member"] #sheet-frame,
   body[data-print="member"] .party > :not(.member),
-  body[data-print="member"] .member > :not(.member-sheet) {
+  body[data-print="member"] .member > :not(.member-print) {
     display: none;
   }
   body[data-print="member"] #party-frame {
     display: flex;
   }
-  body[data-print="member"] .member,
-  body[data-print="member"] .member-sheet {
+  body[data-print="member"] .member-print {
+    display: block;
+  }
+  body[data-print="member"] .member {
     padding: 0;
     border: 0;
   }

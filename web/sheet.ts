@@ -364,7 +364,8 @@ function knacksSection(c: SheetData): HTMLElement | null {
 function runesSection(c: SheetData): HTMLElement | null {
   if (c.runes.length === 0) return null;
   const list = h("div", { class: "trait-list" });
-  for (const r of c.runes) list.append(castingEntry(r.name, r.tag, null, null, r.text));
+  for (const r of c.runes)
+    list.append(castingEntry(r.name, r.tag, r.duration, r.range, r.text || null));
   return section("Runes", list);
 }
 
@@ -409,7 +410,13 @@ export interface SheetData {
   }[];
   glamours: { name: string; duration: string | null; range: string | null; body: string | null }[];
   knacks: SheetTrait[];
-  runes: { name: string; tag: string | null; text: string }[];
+  runes: {
+    name: string;
+    tag: string | null;
+    duration: string | null;
+    range: string | null;
+    text: string;
+  }[];
   notes: string[];
 }
 
@@ -457,13 +464,19 @@ export function renderSheet(sheet: HTMLElement, c: Character): void {
   renderSheetData(sheet, characterSheet(c));
 }
 
-/** Render the full sheet, filling in (with a staggered reveal) on each call
- *  unless `reveal` is false. */
-export function renderSheetData(
-  sheet: HTMLElement,
+/** The sheet's parts, top to bottom. The Party tab leaves out what its own
+ *  controls already show (`gear`, `notes`) and puts its controls between. */
+export interface SheetParts {
+  head: HTMLElement;
+  statline: HTMLElement;
+  grid: HTMLElement;
+  abilityFlow: HTMLElement;
+}
+
+export function sheetParts(
   c: SheetData,
-  { reveal = true }: { reveal?: boolean } = {},
-): void {
+  { gear = true, notes = true }: { gear?: boolean; notes?: boolean } = {},
+): SheetParts {
   const meta = h("div", { class: "sheet-sub-row" }, ...c.badges.map((b) => badge(b)));
   const head = h(
     "div",
@@ -481,15 +494,24 @@ export function renderSheetData(
     h("div", { class: "stack span-4" }, ...secs.filter((n): n is HTMLElement => n !== null));
   const kindredTraits = traitSection(c.kindredTraits.title, c.kindredTraits.traits);
   const classTraits = traitSection(c.classTraits.title, c.classTraits.traits);
-  const grid = h(
-    "div",
-    { class: "sheet-grid" },
-    // Physique (tall) sits under the left stack, Languages (short) under the
-    // middle, so the two columns balance beside the tall Persona.
-    stack(abilitiesSection(c), skillsSection(c), kvSection("Physique", c.physique)),
-    stack(savesSection(c), languagesSection(c), personaSection(c)),
-    gearSection(c),
-  );
+  const grid = gear
+    ? h(
+        "div",
+        { class: "sheet-grid" },
+        // Physique (tall) sits under the left stack, Languages (short) under the
+        // middle, so the two columns balance beside the tall Persona.
+        stack(abilitiesSection(c), skillsSection(c), kvSection("Physique", c.physique)),
+        stack(savesSection(c), languagesSection(c), personaSection(c)),
+        gearSection(c),
+      )
+    : h(
+        "div",
+        { class: "sheet-grid" },
+        // No gear column: physique and persona take the third.
+        stack(abilitiesSection(c), skillsSection(c)),
+        stack(savesSection(c), languagesSection(c)),
+        stack(kvSection("Physique", c.physique), personaSection(c)),
+      );
   // The prose sections (abilities, spells, glamours, knacks) flow as one block.
   // On screen each keeps its own two-column trait list; in print the whole block
   // becomes a single newspaper flow (down one column, then the next).
@@ -503,10 +525,20 @@ export function renderSheetData(
       glamoursSection(c),
       knacksSection(c),
       runesSection(c),
-      notesSection(c),
+      notes ? notesSection(c) : null,
     ].filter((n): n is HTMLElement => n !== null),
   );
+  return { head, statline, grid, abilityFlow };
+}
 
+/** Render the full sheet, filling in (with a staggered reveal) on each call
+ *  unless `reveal` is false. */
+export function renderSheetData(
+  sheet: HTMLElement,
+  c: SheetData,
+  { reveal = true }: { reveal?: boolean } = {},
+): void {
+  const { head, statline, grid, abilityFlow } = sheetParts(c);
   const blocks = [head, statline, grid, abilityFlow];
   blocks.forEach((node, i) => node.style.setProperty("--i", String(i)));
   sheet.dataset.state = "full";

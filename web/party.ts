@@ -49,8 +49,8 @@ import {
   safeName,
   storeParty,
 } from "./party-store.ts";
-import { h, renderSheetData, type SheetData } from "./sheet.ts";
-import { block, button, form, numInput, select, stat, textInput } from "./ui.ts";
+import { h, renderSheetData, type SheetData, sheetParts } from "./sheet.ts";
+import { block, button, form, numInput, select, textInput } from "./ui.ts";
 
 export interface PartyView {
   /** Use the rules from a newly loaded Player's Book. */
@@ -430,27 +430,19 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
 
   // ── one member ───────────────────────────────────────────────────────────
   function member(pc: PC): HTMLElement {
-    const load = loadOf(pc, party, rules);
-    const klass = classOf(rules, pc.class);
-    const next = nextLevelXp(pc, klass);
     const mod = xpModifier(pc, rules);
+    // The sheet's parts, less what the controls already show (gear, notes):
+    // name and stats, abilities and saves, then the controls, then the
+    // kindred and class abilities, spells, glamours, knacks and runes.
+    const data = hooks.sheet(pc, party, rules);
+    const parts = sheetParts(data, { gear: false, notes: false });
     return h(
       "article",
       { class: "member", "aria-label": pc.name },
       h(
         "header",
         { class: "member__head" },
-        h(
-          "div",
-          {},
-          h("h2", { class: "sheet-name" }, pc.name),
-          h(
-            "p",
-            { class: "member__sub" },
-            `Level ${pc.level} ${kindredClass(pc, rules)}` +
-              `${pc.player ? ` · player ${pc.player}` : ""}${pc.status !== "active" ? ` · ${pc.status}` : ""}`,
-          ),
-        ),
+        parts.head,
         h(
           "div",
           { class: "member__actions" },
@@ -471,16 +463,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           }),
         ),
       ),
-      h(
-        "dl",
-        { class: "statline member__stats" },
-        stat("HP", `${pc.hp}/${pc.maxHp}`),
-        stat("AC", `${computeAc(pc, rules.catalog)}`),
-        stat("Attack", signed(pc.attack)),
-        stat("XP", `${pc.xp.toLocaleString()}${next !== null ? `/${next.toLocaleString()}` : ""}`),
-        stat("Speed", load.speed > 0 ? `${load.speed}` : "0"),
-        stat("Day", `${party.day}`),
-      ),
+      parts.statline,
+      h("div", { class: "member-sheet" }, parts.grid),
       h(
         "div",
         { class: "member__grid" },
@@ -496,18 +480,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         block("Notes", notesBlock(pc)),
         block("Character", detailBlock(pc)),
       ),
-      memberSheet(pc),
+      h("div", { class: "member-sheet" }, parts.abilityFlow),
+      printable(data),
     );
-  }
-
-  /** The member's full sheet, as they are now: it follows every change above. */
-  function memberSheet(pc: PC): HTMLElement {
-    const el = h("article", {
-      class: "sheet member-sheet",
-      "aria-label": `${pc.name}, full sheet`,
-    });
-    renderSheetData(el, hooks.sheet(pc, party, rules), { reveal: false });
-    return el;
   }
 
   function hpBlock(pc: PC): HTMLElement {
@@ -1131,6 +1106,13 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       render();
     },
   };
+}
+
+/** The whole sheet, gear and notes included, for "Print sheet" only. */
+function printable(data: SheetData): HTMLElement {
+  const el = h("article", { class: "sheet member-print" });
+  renderSheetData(el, data, { reveal: false });
+  return el;
 }
 
 /** Print the selected member's sheet alone (app.css, body[data-print]). */
