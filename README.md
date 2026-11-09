@@ -207,8 +207,8 @@ The web app has the same party under its Party tab. Generate a character, then
 choose Add to party. The party stays in that browser. Export saves it as a
 `party.json` that `dw party` can use (copy it to `dw party path`), and Import
 reads one back. Import also takes filled-in fillable character sheets, like
-`dw party import`; the sheets are read in the browser and go nowhere. "View full sheet" shows a member on the Sheet tab, as they are
-now, to print or download.
+`dw party import`; the sheets are read in the browser and go nowhere. The selected member's full
+sheet shows under their controls and follows each change. Print sheet prints it.
 
 ## Status
 

@@ -457,8 +457,13 @@ export function renderSheet(sheet: HTMLElement, c: Character): void {
   renderSheetData(sheet, characterSheet(c));
 }
 
-/** Render the full sheet, filling in (with a staggered reveal) on each call. */
-export function renderSheetData(sheet: HTMLElement, c: SheetData): void {
+/** Render the full sheet, filling in (with a staggered reveal) on each call
+ *  unless `reveal` is false. */
+export function renderSheetData(
+  sheet: HTMLElement,
+  c: SheetData,
+  { reveal = true }: { reveal?: boolean } = {},
+): void {
   const meta = h("div", { class: "sheet-sub-row" }, ...c.badges.map((b) => badge(b)));
   const head = h(
     "div",
@@ -508,6 +513,7 @@ export function renderSheetData(sheet: HTMLElement, c: SheetData): void {
   sheet.replaceChildren(...blocks);
   // Restart the reveal animation on each generate.
   sheet.classList.remove("reveal");
+  if (!reveal) return;
   void sheet.offsetWidth;
   sheet.classList.add("reveal");
 }

@@ -23,13 +23,12 @@ import {
   saveBook,
   spellMap,
 } from "./book.ts";
-import { pcMarkdown } from "../src/party/render.ts";
 import { emptyRules } from "../src/party/rules.ts";
 import { memberSheet } from "./member-sheet.ts";
 import { mountParty } from "./party.ts";
 import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
-import { renderEmpty, renderSheet, renderSheetData } from "./sheet.ts";
+import { renderEmpty, renderSheet } from "./sheet.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const fileInput = $<HTMLInputElement>("file");
@@ -46,6 +45,19 @@ const downloadBtn = $<HTMLButtonElement>("download");
 const addPartyBtn = $<HTMLButtonElement>("add-party");
 const forgetBtn = $<HTMLButtonElement>("forget");
 const sheet = $<HTMLElement>("sheet");
+const bookPanel = $<HTMLDetailsElement>("book-panel");
+const bookNote = $<HTMLSpanElement>("book-note");
+
+/** With a book, its panel folds up at the foot of the rail; without one, it
+ *  opens at the top, where the rite starts. */
+function placeBookPanel(loaded: boolean): void {
+  const rail = bookPanel.parentElement;
+  if (!rail) return;
+  if (loaded) rail.append(bookPanel);
+  else rail.prepend(bookPanel);
+  bookPanel.open = !loaded;
+  bookNote.textContent = loaded ? "loaded" : "";
+}
 
 // The rite's fields stay visible but inert until a book is offered.
 const riteFields = [kindredSel, classSel, alignmentSel, nameInput, playerInput, generateBtn];
@@ -163,6 +175,7 @@ function useBook(b: Book): void {
   updateClassOptions();
   setRiteEnabled(true);
   forgetBtn.hidden = false;
+  placeBookPanel(true);
 }
 
 forgetBtn.addEventListener("click", () => {
@@ -175,6 +188,7 @@ forgetBtn.addEventListener("click", () => {
   classSel.replaceChildren();
   party.setRules(emptyRules());
   table.setBook(null);
+  placeBookPanel(false);
 });
 
 // ── sheet and party tabs ───────────────────────────────────────────────────
@@ -203,18 +217,7 @@ const party = mountParty($<HTMLElement>("party"), {
   onCount(n) {
     partyCount.textContent = n > 0 ? `(${n})` : "";
   },
-  // A member's full sheet, as they are now, ready to print or download.
-  onSheet(pc, members, rules) {
-    renderSheetData(sheet, memberSheet(pc, members, rules, book));
-    lastMarkdown = pcMarkdown(pc, members, rules);
-    lastName = pc.name;
-    lastCharacter = null;
-    addPartyBtn.hidden = true;
-    printBtn.hidden = false;
-    downloadBtn.hidden = false;
-    showTab("sheet");
-    window.scrollTo(0, 0);
-  },
+  sheet: (pc, members, rules) => memberSheet(pc, members, rules, book),
 });
 
 // ── generate & download ────────────────────────────────────────────────────
@@ -263,7 +266,10 @@ addPartyBtn.addEventListener("click", () => {
   showTab("party");
 });
 
-printBtn.addEventListener("click", () => window.print());
+printBtn.addEventListener("click", () => {
+  delete document.body.dataset.print;
+  window.print();
+});
 
 // ── theme ──────────────────────────────────────────────────────────────────
 // The head script in index.html applies the stored choice before first paint;

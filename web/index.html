@@ -48,10 +48,11 @@
 
       <div class="rail-cell">
         <aside class="rail">
-          <section class="panel" aria-label="Player's Book">
-            <div class="panel__title">
+          <details id="book-panel" class="panel panel--fold" open>
+            <summary class="panel__title">
               <span><span class="step">I</span> Player's Book</span>
-            </div>
+              <span id="book-note" class="panel__note"></span>
+            </summary>
             <div class="panel__body">
               <input id="file" type="file" accept="application/pdf" hidden />
               <button id="pick" type="button" class="btn block">Choose PDF</button>
@@ -67,7 +68,7 @@
               </p>
               <button id="forget" type="button" class="btn ghost block" hidden>Forget book</button>
             </div>
-          </section>
+          </details>
 
           <section class="panel" aria-label="Kindred and class">
             <div class="panel__title">

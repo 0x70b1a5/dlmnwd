@@ -195,8 +195,10 @@ reason to exist; never add an upload affordance.
   Import also reads fillable sheet PDFs with the CLI's `src/pdf/fields.ts` and
   `party/import.ts`. Import messages are plain statements; the CLI and the web
   app each add their own fix hints (`unknownItems`, an unset kindred or class).
-  "View full sheet" shows a member on the Sheet tab: `web/member-sheet.ts`
-  turns a member into the `SheetData` that `renderSheetData` draws.
+  The selected member's full sheet shows under their controls and follows
+  each change: `web/member-sheet.ts` turns a member into the `SheetData` that
+  `renderSheetData` draws. "Print sheet" prints that sheet alone
+  (`body[data-print="member"]` in `app.css`).
 - `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the
   wandering check, the turn clock (`src/turn-clock.ts`, the pure half of
   `src/turn.ts`) and a lookup in the saved book. It is built once; rolls only

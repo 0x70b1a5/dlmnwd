@@ -232,6 +232,33 @@ body {
   text-transform: uppercase;
   color: var(--ember);
 }
+/* A panel that folds (the Player's Book, once one is loaded). */
+.panel--fold > .panel__title {
+  cursor: pointer;
+  list-style: none;
+}
+.panel--fold > .panel__title::-webkit-details-marker {
+  display: none;
+}
+.panel--fold > .panel__title::after {
+  content: "+";
+  color: var(--ink-soft);
+}
+.panel--fold[open] > .panel__title::after {
+  content: "-";
+}
+.panel--fold:not([open]) > .panel__title {
+  border-bottom: 0;
+}
+.panel--fold > .panel__title:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: -2px;
+}
+.panel__note {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
 .panel__title .step {
   color: var(--ink-soft);
   margin-right: 0.5em;
@@ -1270,12 +1297,31 @@ select option:disabled {
   text-transform: uppercase;
   color: var(--ember-2);
 }
-.member__foot {
+.member__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+.member__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding-top: 0.7rem;
-  border-top: 2px solid var(--line-soft);
+}
+/* The member's full sheet, under their controls. The party's own table rules
+   are for its roster and gear lists; the sheet keeps the sheet's. */
+.member-sheet {
+  padding: 0.9rem 0 0;
+  border-top: 2px solid var(--line);
+}
+.member-sheet table {
+  table-layout: fixed;
+}
+.member-sheet th.num,
+.member-sheet td.num {
+  width: 3.6rem;
+  white-space: normal;
 }
 .load-line {
   margin: 0;
@@ -1337,5 +1383,29 @@ ul.chips-list {
   .tabs,
   #party-frame {
     display: none;
+  }
+}
+/* The rail's Print prints the Sheet tab from any tab; "Print sheet" on a party
+   member prints that member's sheet alone. */
+@media print {
+  /* Beats the global [hidden] rule, which hides the tabs not in view. */
+  body:not([data-print="member"]) #sheet-frame {
+    display: flex !important;
+  }
+  body:not([data-print="member"]) #table-frame {
+    display: none;
+  }
+  body[data-print="member"] #sheet-frame,
+  body[data-print="member"] .party > :not(.member),
+  body[data-print="member"] .member > :not(.member-sheet) {
+    display: none;
+  }
+  body[data-print="member"] #party-frame {
+    display: flex;
+  }
+  body[data-print="member"] .member,
+  body[data-print="member"] .member-sheet {
+    padding: 0;
+    border: 0;
   }
 }

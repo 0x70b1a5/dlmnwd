@@ -49,7 +49,7 @@ import {
   safeName,
   storeParty,
 } from "./party-store.ts";
-import { h } from "./sheet.ts";
+import { h, renderSheetData, type SheetData } from "./sheet.ts";
 import { block, button, form, numInput, select, stat, textInput } from "./ui.ts";
 
 export interface PartyView {
@@ -70,8 +70,8 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" 
 export interface PartyHooks {
   /** Hears the member count after each change. */
   onCount(n: number): void;
-  /** Show a member's full sheet. */
-  onSheet(pc: PC, party: Party, rules: PartyRules): void;
+  /** A member's full sheet, drawn under their controls. */
+  sheet(pc: PC, party: Party, rules: PartyRules): SheetData;
 }
 
 /** Show the party in `root`. */
@@ -440,12 +440,35 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       h(
         "header",
         { class: "member__head" },
-        h("h2", { class: "sheet-name" }, pc.name),
         h(
-          "p",
-          { class: "member__sub" },
-          `Level ${pc.level} ${kindredClass(pc, rules)}` +
-            `${pc.player ? ` · player ${pc.player}` : ""}${pc.status !== "active" ? ` · ${pc.status}` : ""}`,
+          "div",
+          {},
+          h("h2", { class: "sheet-name" }, pc.name),
+          h(
+            "p",
+            { class: "member__sub" },
+            `Level ${pc.level} ${kindredClass(pc, rules)}` +
+              `${pc.player ? ` · player ${pc.player}` : ""}${pc.status !== "active" ? ` · ${pc.status}` : ""}`,
+          ),
+        ),
+        h(
+          "div",
+          { class: "member__actions" },
+          button("Print sheet", printSheet),
+          button("Download .md", () =>
+            download(
+              `${safeName(pc.name, "character")}.md`,
+              pcMarkdown(pc, party, rules),
+              "text/markdown",
+            ),
+          ),
+          button("Remove", () => {
+            if (!confirm(`Remove ${pc.name} from the party?`)) return;
+            act(() => {
+              party.members = party.members.filter((m) => m !== pc);
+              return `Removed ${pc.name} from the party.`;
+            });
+          }),
         ),
       ),
       h(
@@ -473,26 +496,18 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         block("Notes", notesBlock(pc)),
         block("Character", detailBlock(pc)),
       ),
-      h(
-        "div",
-        { class: "member__foot" },
-        button("View full sheet", () => hooks.onSheet(pc, party, rules)),
-        button("Download sheet .md", () =>
-          download(
-            `${safeName(pc.name, "character")}.md`,
-            pcMarkdown(pc, party, rules),
-            "text/markdown",
-          ),
-        ),
-        button("Remove from party", () => {
-          if (!confirm(`Remove ${pc.name} from the party?`)) return;
-          act(() => {
-            party.members = party.members.filter((m) => m !== pc);
-            return `Removed ${pc.name} from the party.`;
-          });
-        }),
-      ),
+      memberSheet(pc),
     );
+  }
+
+  /** The member's full sheet, as they are now: it follows every change above. */
+  function memberSheet(pc: PC): HTMLElement {
+    const el = h("article", {
+      class: "sheet member-sheet",
+      "aria-label": `${pc.name}, full sheet`,
+    });
+    renderSheetData(el, hooks.sheet(pc, party, rules), { reveal: false });
+    return el;
   }
 
   function hpBlock(pc: PC): HTMLElement {
@@ -1116,6 +1131,13 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       render();
     },
   };
+}
+
+/** Print the selected member's sheet alone (app.css, body[data-print]). */
+function printSheet(): void {
+  document.body.dataset.print = "member";
+  window.addEventListener("afterprint", () => delete document.body.dataset.print, { once: true });
+  window.print();
 }
 
 function emptyState(): HTMLElement {

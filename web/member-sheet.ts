@@ -1,4 +1,4 @@
-// A party member as sheet data, so the Sheet tab can show (and print) the full
+// A party member as sheet data, so the Party tab can show (and print) the full
 // sheet of anyone in the party, not only a fresh roll. Pure: the details of
 // spells, glamours and knacks come from the saved book when there is one.
 
