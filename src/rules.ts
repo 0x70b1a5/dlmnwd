@@ -61,6 +61,13 @@ export function canBeAlignment(classId: string, alignment: string): boolean {
   return !RESTRICTED_CLASSES.has(classId);
 }
 
+export const ALIGNMENTS = ["Lawful", "Neutral", "Chaotic"] as const;
+
+/** Roll an alignment the class permits, each equally likely. */
+export function rollAlignment(classId: string): string {
+  return pick(ALIGNMENTS.filter((a) => canBeAlignment(classId, a)));
+}
+
 interface KindredChoice {
   id: string;
   kindredType: string;

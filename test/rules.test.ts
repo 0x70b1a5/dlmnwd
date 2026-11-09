@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { rollKindredClass } from "../src/rules.ts";
+import { rollAlignment, rollKindredClass } from "../src/rules.ts";
 
 // Invented, non-canon kindreds. Only the Mortal/Fairy split matters here: the
 // two devotional classes are restricted to mortals.
@@ -77,4 +77,12 @@ test("no legal pair yields null", () => {
   expect(rollKindredClass([KINDREDS[2]], [CLASSES[0], CLASSES[3]])).toBeNull();
   expect(rollKindredClass([], CLASSES)).toBeNull();
   expect(rollKindredClass(KINDREDS, [])).toBeNull();
+});
+
+const alignmentsRolled = (classId: string): Set<string> =>
+  new Set(Array.from({ length: 300 }, () => rollAlignment(classId)));
+
+test("rolls every alignment the class allows, and only those", () => {
+  expect(alignmentsRolled("fighter")).toEqual(new Set(["Lawful", "Neutral", "Chaotic"]));
+  expect(alignmentsRolled("cleric")).toEqual(new Set(["Lawful", "Neutral"]));
 });

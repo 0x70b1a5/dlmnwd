@@ -19,7 +19,13 @@ import { parseKnacks } from "../parse/knack.ts";
 import { parseSymbioticFlesh } from "../parse/symbiotic-flesh.ts";
 import { extractPages } from "../pdf/extract.ts";
 import { pdfPath } from "../pdf/config.ts";
-import { canBeAlignment, canBeClass, normalizeAlignment, rollKindredClass } from "../rules.ts";
+import {
+  canBeAlignment,
+  canBeClass,
+  normalizeAlignment,
+  rollAlignment,
+  rollKindredClass,
+} from "../rules.ts";
 import { characterToPc } from "../party/from-character.ts";
 import { saveParty } from "../party/store.ts";
 import { partyContext } from "./party.ts";
@@ -118,7 +124,8 @@ export function rollCharacter(args: string[]): Character {
   return generate(kindred, klass, {
     name,
     player,
-    alignment,
+    // Left out, the alignment is rolled like the kindred and class.
+    alignment: alignment ?? rollAlignment(klass.id),
     adventuringItems,
     spellRows,
     glamoursTable,

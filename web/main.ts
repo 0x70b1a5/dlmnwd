@@ -13,7 +13,7 @@ import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
 import { type Character, generate, toMarkdown } from "../src/gen/character.ts";
 import { extractPagesEmulated } from "../src/pdf/emulate.ts";
-import { canBeAlignment, canBeClass, rollKindredClass } from "../src/rules.ts";
+import { canBeAlignment, canBeClass, rollAlignment, rollKindredClass } from "../src/rules.ts";
 import {
   type Book,
   bookRules,
@@ -114,7 +114,7 @@ function updateAlignmentOptions(): void {
   const allowed = klass ? canBeAlignment(klass.id, "Chaotic") : true;
   chaoticOpt.disabled = !allowed;
   if (!allowed && alignmentSel.value === "Chaotic") {
-    alignmentSel.value = "Neutral";
+    alignmentSel.value = RANDOM;
   }
 }
 
@@ -235,7 +235,8 @@ generateBtn.addEventListener("click", () => {
   const character = generate(kindred, klass, {
     name: nameInput.value.trim() || undefined,
     player: playerInput.value.trim() || undefined,
-    alignment: alignmentSel.value,
+    // Random rolls among the alignments the class allows.
+    alignment: alignmentSel.value || rollAlignment(klass.id),
     adventuringItems: book.adventuringItems,
     spellRows: spellMap(book),
     glamoursTable: book.glamoursTable,
