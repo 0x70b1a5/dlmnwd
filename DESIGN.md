@@ -4,6 +4,11 @@ Visual system for the web character generator, derived from the Dolmenwood
 Player's Book interior (sampled from the book itself). The page should read as an
 interactive leaf of the rulebook.
 
+This file records an earlier intent. The implemented system is `web/app.css`:
+the system's proportional face with tabular numbers, the pixel face for the
+wordmark only, and a layout that puts efficient use of space first on both a
+laptop and a phone.
+
 ## Theme
 
 Light. A near-white book page under even reading light. The exact hex values are

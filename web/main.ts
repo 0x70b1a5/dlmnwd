@@ -206,11 +206,19 @@ function showTab(tab: Tab): void {
     btn.setAttribute("aria-selected", String(name === tab));
     panel.hidden = name !== tab;
   }
+  // The generator rail belongs to the Sheet tab; the others take the full width.
+  document.body.dataset.tab = tab;
 }
 for (const [name, [btn]] of Object.entries(tabs) as [Tab, [HTMLButtonElement, HTMLElement]][])
   btn.addEventListener("click", () => showTab(name));
 
 const table = mountTable($<HTMLElement>("table"));
+// The dice and turn bar sits at the foot of the window on every tab. The page
+// keeps that much room under its last line.
+document.body.append(table.dock);
+new ResizeObserver(() =>
+  document.body.style.setProperty("--dock-h", `${table.dock.offsetHeight}px`),
+).observe(table.dock);
 
 const partyCount = $<HTMLSpanElement>("party-count");
 const party = mountParty($<HTMLElement>("party"), {
@@ -218,6 +226,7 @@ const party = mountParty($<HTMLElement>("party"), {
     partyCount.textContent = n > 0 ? `(${n})` : "";
   },
   sheet: (pc, members, rules) => memberSheet(pc, members, rules, book),
+  onNote: (text, kind) => table.say("Party", text, kind === "error" ? "miss" : ""),
 });
 
 // ── generate & download ────────────────────────────────────────────────────

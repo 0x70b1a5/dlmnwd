@@ -180,8 +180,11 @@ reason to exist; never add an upload affordance.
   prefilled fixture for iterating on the UI without a PDF). Keep sheet.ts free of
   parsing and file I/O.
 - `web/index.html` is the entry; `web/app.css` is the implemented visual system
-  (a light-inverted "textmode" character sheet set entirely in Departure Mono).
-  `DESIGN.md` and `PRODUCT.md` describe the design/product intent as context.
+  (a parchment-and-ember sheet set in the system's proportional face with
+  tabular numbers; only the wordmark uses Departure Mono). Space and speed of
+  use come before style. `DESIGN.md` and `PRODUCT.md` give earlier intent as context.
+  The rail makes characters, so only the Sheet tab shows it
+  (`body[data-tab]`, set by `showTab` in `main.ts`).
 - `web/book.ts` parses the Player's Book once (`parseBook`) and keeps the result
   in the browser's local storage, so a reload needs no PDF. It is the user's own
   copy on their own machine, like the CLI's index. `INDEX_VERSION`
@@ -195,17 +198,26 @@ reason to exist; never add an upload affordance.
   Import also reads fillable sheet PDFs with the CLI's `src/pdf/fields.ts` and
   `party/import.ts`. Import messages are plain statements; the CLI and the web
   app each add their own fix hints (`unknownItems`, an unset kindred or class).
-  The selected member shows as one sheet: `web/member-sheet.ts` turns a
-  member into `SheetData`, and `sheetParts` (sheet.ts) gives its parts. The
-  name, stats, abilities and saves come first, then the controls, then the
-  kindred and class abilities, spells, glamours, knacks and runes. Gear and
-  notes show only in the controls. "Print sheet" prints a hidden copy of the
-  whole sheet (`body[data-print="member"]` in `app.css`).
+  The selected member is laid out by how often each part is used in play. A
+  sticky strip holds the name, the HP controls, AC, attack, speed and saves.
+  Then come the abilities and skills, XP and gold, what the member can cast
+  (each a line that opens to the book's text), gear, coins and notes. Kindred
+  and class abilities fold to one line each, in a right-hand column on a wide
+  screen. A closed "Edit character" fold holds what a session rarely changes.
+  The view is drawn again on each change, so the open folds are kept in an
+  `open` set and each control gets a stable key (`controlKey`) to keep the
+  focus. Layout changes use `@container sheet` queries, not the window width.
+  `web/member-sheet.ts` turns a member into `SheetData` for the rules text and
+  for "Print sheet", which prints a hidden copy of the whole sheet
+  (`body[data-print="member"]` in `app.css`).
 - `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the
   wandering check, the turn clock (`src/turn-clock.ts`, the pure half of
   `src/turn.ts`) and a lookup in the saved book. It is built once; rolls only
-  add to its log, so the field in use keeps the focus. `web/ui.ts` holds the
-  form helpers it shares with the Party tab.
+  add to its log, so the field in use keeps the focus. It also gives the dock
+  (`TableView.dock`): dice, the turn count and the last result, fixed at the
+  bottom of the window on every tab. `main.ts` adds it to the body and sends
+  the Party tab's messages to it (`onNote`). `web/ui.ts` holds the form
+  helpers it shares with the Party tab.
 - `scripts/build-single.ts` inlines the bundled JS/CSS/fonts into one self-contained
   HTML after `web:build`; it throws if any external asset survives.
 - Deploys to Cloudflare Pages as the static `dist/` build; bundled at dlmnwd.com with an

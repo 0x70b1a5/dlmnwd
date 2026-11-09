@@ -5,6 +5,9 @@
 //
 // The view is built once. A roll only adds to the log and the clock only redraws
 // its own lines, so the field in use keeps the focus.
+//
+// The dock is a bar for every tab: the common dice, the newest log line and the
+// turn count. It shares the log and the clock with the tab.
 
 import { roll } from "../src/dice.ts";
 import { initLines } from "../src/initiative.ts";
@@ -24,10 +27,15 @@ import { block, button, form, numInput } from "./ui.ts";
 export interface TableView {
   /** Use the saved book for the lookup (null when it is forgotten). */
   setBook(book: Book | null): void;
+  /** The dice and turn bar, to show under every tab. */
+  dock: HTMLElement;
+  /** Add a line to the log (and so to the dock). */
+  say(title: string, result: string, kind?: "" | "hit" | "miss"): void;
 }
 
 const TURN_KEY = "dlmnwd:turn";
 const LOG_SIZE = 60;
+const DICE = [4, 6, 8, 10, 12, 20, 100];
 
 function loadTurns(): TurnState {
   try {
@@ -61,7 +69,9 @@ export function mountTable(root: HTMLElement): TableView {
   let book: Book | null = null;
 
   // ── the log: newest first ──
-  const log = h("ol", { class: "table-log", "aria-live": "polite" });
+  const log = h("ol", { class: "table-log" });
+  // The newest line, shown in the dock. It announces each roll.
+  const last = h("output", { class: "dock__last", "aria-live": "polite" });
   function say(title: string, result: string, detail = "", kind: "" | "hit" | "miss" = ""): void {
     const li = h(
       "li",
@@ -71,6 +81,9 @@ export function mountTable(root: HTMLElement): TableView {
       detail ? h("span", { class: "muted" }, detail) : null,
     );
     log.prepend(li);
+    last.replaceChildren(...[...li.childNodes].map((n) => n.cloneNode(true)));
+    if (kind) last.dataset.kind = kind;
+    else delete last.dataset.kind;
     while (log.children.length > LOG_SIZE) log.lastElementChild?.remove();
   }
   function fail(err: unknown): void {
@@ -85,7 +98,14 @@ export function mountTable(root: HTMLElement): TableView {
       h(
         "div",
         { class: "row" },
-        button("Clear log", () => log.replaceChildren(), "btn mini"),
+        button(
+          "Clear log",
+          () => {
+            log.replaceChildren();
+            last.replaceChildren();
+          },
+          "btn mini",
+        ),
       ),
     ),
     "wide",
@@ -114,9 +134,7 @@ export function mountTable(root: HTMLElement): TableView {
       h(
         "div",
         { class: "row" },
-        ...[4, 6, 8, 10, 12, 20, 100].map((n) =>
-          button(`d${n}`, () => rollExpr(`1d${n}`), "btn mini"),
-        ),
+        ...DICE.map((n) => button(`d${n}`, () => rollExpr(`1d${n}`), "btn mini")),
       ),
     ),
   );
@@ -212,6 +230,7 @@ export function mountTable(root: HTMLElement): TableView {
   // ── the turn clock ──
   let turns = loadTurns();
   const clockLine = h("p", { class: "load-line" });
+  const dockTurn = h("span", { class: "dock__count" });
   const tracked = h("ul", { class: "plain" });
   const turnsIn = numInput("1", { min: "1", "aria-label": "Turns to advance" });
   const everyIn = numInput(String(turns.checkEvery), {
@@ -224,6 +243,7 @@ export function mountTable(root: HTMLElement): TableView {
 
   function drawClock(): void {
     const next = turns.turn + turns.checkEvery - (turns.turn % turns.checkEvery);
+    dockTurn.textContent = `Turn ${turns.turn}`;
     clockLine.textContent = `Turn ${turns.turn} (${formatElapsed(turns.turn)} elapsed). Next wandering check: turn ${next}.`;
     tracked.replaceChildren(
       ...turns.tracked.map((t) =>
@@ -460,10 +480,38 @@ export function mountTable(root: HTMLElement): TableView {
   );
   drawLookup();
 
+  const dockExpr = text({ placeholder: "2d6+1", "aria-label": "Dice to roll" });
+  const dockForm = form(
+    () => rollExpr(dockExpr.value.trim() || "1d20"),
+    dockExpr,
+    button("Roll", null, "btn mini", "submit"),
+  );
+  dockForm.classList.add("dock__expr");
+  const dock = h(
+    "div",
+    { class: "dock", role: "region", "aria-label": "Dice and turns" },
+    last,
+    h(
+      "div",
+      { class: "dock__dice" },
+      ...DICE.map((n) => button(`d${n}`, () => rollExpr(`1d${n}`), "btn mini")),
+      button("2d6", () => rollExpr("2d6"), "btn mini"),
+    ),
+    dockForm,
+    h(
+      "div",
+      { class: "dock__turn" },
+      dockTurn,
+      button("+1 turn", () => advanceBy(1), "btn mini", "button", "Advance 1 turn"),
+    ),
+  );
+
   return {
     setBook(b) {
       book = b;
       drawLookup();
     },
+    dock,
+    say: (title, result, kind = "") => say(title, result, "", kind),
   };
 }

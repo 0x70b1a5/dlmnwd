@@ -1,8 +1,9 @@
-/* Dolmenwood tools: a "textmode" character sheet. Type system follows the
-   pixel-terminal look: Departure Mono for everything, hierarchy from size,
-   weight, and case alone. The light palette is a light inversion of that
-   stone/gold: warm parchment, ink, ember. The dark palette is the Script
-   Wizards black/orange scheme (scriptwizards.org). */
+/* Dolmenwood tools: a character sheet and a table tool. The text is set in the
+   system's own proportional face, which packs more words on a line than a
+   fixed-width face and stays clear at small sizes. Numbers are tabular so
+   columns line up. Only the wordmark keeps the pixel face. The light palette
+   is warm parchment, ink and ember. The dark palette is the Script Wizards
+   black/orange scheme (scriptwizards.org). */
 
 /* Departure Mono is SIL Open Font License 1.1. Licence text sits beside it in
    web/fonts/, and NOTICE.md records the scope. */
@@ -33,9 +34,9 @@
   --sheen: 255, 255, 255; /* bevel highlight rgb */
   --row-hover: rgba(36, 29, 20, 0.045); /* table row hover tint */
 
-  --display: "Departure Mono", ui-monospace, monospace; /* character name */
-  --ui: "Departure Mono", ui-monospace, monospace; /* titles, labels, numbers */
-  --body: "Departure Mono", ui-monospace, monospace; /* reading text */
+  --display: "Departure Mono", ui-monospace, monospace; /* the wordmark only */
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --body: var(--ui); /* reading text */
 
   color-scheme: light;
 }
@@ -93,7 +94,10 @@ body {
   min-height: 100svh;
   background-color: var(--paper);
   color: var(--ink);
-  font: 16px/1.45 var(--body);
+  font: 15px/1.4 var(--body);
+  font-variant-numeric: tabular-nums;
+  /* Room for the dice dock, which stays at the bottom of the window. */
+  padding-bottom: var(--dock-h, 3.4rem);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -103,7 +107,7 @@ body {
 .shell {
   max-width: 1340px;
   margin: 0 auto;
-  padding: clamp(0.9rem, 2.4vw, 1.6rem);
+  padding: clamp(0.5rem, 1.6vw, 1rem);
   display: grid;
   grid-template-columns: minmax(220px, 256px) 1fr;
   grid-template-areas:
@@ -130,7 +134,7 @@ body {
   top: 0.9rem;
   /* A rail taller than the window scrolls on its own; otherwise its last
      buttons stay out of reach until the page ends. */
-  max-height: calc(100vh - 1.8rem);
+  max-height: calc(100vh - 1.8rem - var(--dock-h, 3.4rem));
   overflow-y: auto;
   scrollbar-width: thin;
   /* Room for the buttons' focus rings inside the scroll box. */
@@ -147,6 +151,16 @@ body {
   grid-area: foot;
 }
 
+/* The rail makes characters, so only the Sheet tab shows it. The Party and
+   Table tabs get the full width. */
+body:not([data-tab="sheet"]) .rail-cell {
+  display: none;
+}
+body:not([data-tab="sheet"]) .shell {
+  grid-template-columns: 1fr;
+  grid-template-areas: "head" "sheet" "foot";
+}
+
 @media (max-width: 880px) {
   .shell {
     grid-template-columns: 1fr;
@@ -154,6 +168,7 @@ body {
   }
   .rail {
     position: static;
+    max-height: none;
   }
 }
 
@@ -161,16 +176,15 @@ body {
 
 .masthead {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.3rem 1rem;
   flex-wrap: wrap;
-  padding-bottom: 0.4rem;
 }
 
 .wordmark {
   margin: 0;
-  font: 400 clamp(2.2rem, 6.5vw, 3.8rem) / 0.82 var(--ui);
+  font: 400 clamp(1.3rem, 3vw, 1.7rem) / 1 var(--display);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--ember);
@@ -185,27 +199,26 @@ body {
 
 .masthead__side {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.7rem;
 }
 
 .tagline {
-  margin: 0 0 0.2rem;
-  font-family: var(--ui);
-  font-size: 0.8rem;
+  margin: 0;
+  font: 600 0.72rem/1.2 var(--ui);
   text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--ink-soft);
   text-align: right;
 }
 
 .theme-toggle {
-  font: 400 0.8rem/1 var(--ui);
+  font: 600 0.72rem/1 var(--ui);
   text-transform: uppercase;
   cursor: pointer;
   color: var(--ink-soft);
   background: none;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   padding: 0.3rem 0.5rem;
 }
 .theme-toggle:hover {
@@ -228,6 +241,7 @@ body {
   border-bottom: 2px solid var(--line);
   background: var(--paper-sunk);
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.95rem;
   text-transform: uppercase;
   color: var(--ember);
@@ -279,6 +293,7 @@ body {
 }
 .label {
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.82rem;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -294,7 +309,7 @@ input[type="number"] {
   font: 1rem var(--body);
   color: var(--ink);
   background: var(--paper-sunk);
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   padding: 0.4rem 0.55rem;
   box-shadow:
     inset 1px 1px 0 rgba(var(--shade), 0.22),
@@ -340,7 +355,7 @@ select option:disabled {
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 
 .btn {
-  font: 400 1rem/1 var(--ui);
+  font: 600 0.9rem/1 var(--ui);
   text-transform: uppercase;
   cursor: pointer;
   color: var(--accent-ink);
@@ -385,6 +400,7 @@ select option:disabled {
 .status {
   margin: 0;
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.85rem;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -421,7 +437,7 @@ select option:disabled {
 
 .sheet {
   flex: 1;
-  padding: clamp(0.9rem, 2vw, 1.4rem);
+  padding: clamp(0.6rem, 1.6vw, 1.1rem);
 }
 
 /* Empty state */
@@ -437,6 +453,7 @@ select option:disabled {
 }
 .empty .glyph {
   font-family: var(--ui);
+  font-weight: 600;
   font-size: clamp(3rem, 9vw, 5rem);
   line-height: 1;
   color: var(--faint);
@@ -444,6 +461,7 @@ select option:disabled {
 .empty .say {
   margin: 0.8rem 0 0;
   font-family: var(--ui);
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
@@ -464,12 +482,9 @@ select option:disabled {
 }
 .sheet-name {
   margin: 0;
-  font: 400 clamp(1.7rem, 4vw, 2.6rem) / 0.92 var(--display);
-  text-transform: uppercase;
+  font: 700 clamp(1.3rem, 2.6vw, 1.8rem) / 1.1 var(--ui);
   color: var(--ember);
-  /* Same stroke trick as the wordmark: no synthetic bold on a pixel face. */
-  -webkit-text-stroke: 0.035em currentColor;
-  paint-order: stroke fill;
+  overflow-wrap: anywhere;
 }
 .sheet-sub-row {
   display: flex;
@@ -496,6 +511,7 @@ select option:disabled {
 .statline dt {
   margin: 0;
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.78rem;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -503,10 +519,10 @@ select option:disabled {
 .statline dd {
   margin: 0.05rem 0 0;
   font-family: var(--ui);
-  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  font-weight: 600;
+  font-size: clamp(1.2rem, 2.4vw, 1.6rem);
   line-height: 1;
   color: var(--ink);
-  font-variant-numeric: tabular-nums;
 }
 
 /* ── Dense section grid ────────────────────────────────────────────────── */
@@ -589,7 +605,8 @@ select option:disabled {
 }
 .section > h3 {
   margin: 0 0 0.4rem;
-  font: 400 0.85rem/1 var(--ui);
+  font: 700 0.78rem/1 var(--ui);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ember-2);
 }
@@ -612,6 +629,7 @@ select option:disabled {
 }
 .sheet thead th {
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.85rem;
   text-transform: uppercase;
   color: var(--ember-2);
@@ -626,7 +644,6 @@ select option:disabled {
 }
 .sheet .num {
   text-align: right;
-  font-family: var(--ui);
   font-variant-numeric: tabular-nums;
 }
 /* Numeric columns hold 2–3 glyphs; pin them narrow so the label column keeps
@@ -653,6 +670,7 @@ select option:disabled {
   align-items: baseline;
   gap: 0.35rem;
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.8rem;
   text-transform: uppercase;
   color: var(--ink);
@@ -695,6 +713,7 @@ select option:disabled {
   column-span: all;
   margin: 0.5rem 0 0.3rem;
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.82rem;
   text-transform: uppercase;
   color: var(--ember-2);
@@ -723,6 +742,7 @@ select option:disabled {
 }
 .trait .tn {
   font-family: var(--ui);
+  font-weight: 600;
   color: var(--ember-2);
 }
 /* Trait sub-structure, three visible levels below the section title:
@@ -736,6 +756,7 @@ select option:disabled {
 }
 .trait .sub-label {
   font-family: var(--ui);
+  font-weight: 600;
   color: var(--ink);
 }
 .trait .trait-item {
@@ -755,6 +776,7 @@ select option:disabled {
   display: block;
   margin-top: 0.3rem;
   font-family: var(--ui);
+  font-weight: 600;
   color: var(--ink-soft);
 }
 /* Sub-points sit indented under the trait name; a sub-heading's own points
@@ -778,6 +800,7 @@ select option:disabled {
 .trait .sb-type {
   display: block;
   font-family: var(--ui);
+  font-weight: 600;
   color: var(--ink);
 }
 .trait .sb-stats {
@@ -800,7 +823,8 @@ select option:disabled {
 /* Uppercase tradition/rank tag after a spell name, on the same line. */
 .cast .cast-tag {
   font-family: var(--ui);
-  font-size: 0.62rem;
+  font-weight: 600;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--ember-2);
@@ -838,6 +862,7 @@ select option:disabled {
 }
 .kv dt {
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.7rem;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -853,7 +878,8 @@ select option:disabled {
 /* In-cell tag (e.g. a prime-ability marker) */
 .field-label {
   font-family: var(--ui);
-  font-size: 0.62rem;
+  font-weight: 600;
+  font-size: 0.68rem;
   text-transform: uppercase;
   color: var(--ember-2);
 }
@@ -884,6 +910,7 @@ select option:disabled {
   z-index: 1;
   margin-top: 0.3rem;
   font-family: var(--ui);
+  font-weight: 600;
   font-size: 0.78rem;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -934,8 +961,12 @@ select option:disabled {
   }
   .masthead,
   .rail,
+  .dock,
   .colophon {
     display: none !important;
+  }
+  body {
+    padding-bottom: 0;
   }
   .shell {
     display: block;
@@ -1045,7 +1076,7 @@ select option:disabled {
   gap: 0;
 }
 .tabs [role="tab"] {
-  font: 400 0.95rem/1 var(--ui);
+  font: 600 0.9rem/1 var(--ui);
   text-transform: uppercase;
   cursor: pointer;
   color: var(--ink-soft);
@@ -1102,7 +1133,7 @@ select option:disabled {
   background: var(--row-hover);
 }
 .table-log .log-title {
-  font: 400 0.75rem/1.2 var(--ui);
+  font: 600 0.72rem/1.2 var(--ui);
   text-transform: uppercase;
   color: var(--ink-soft);
   min-width: 9rem;
@@ -1135,7 +1166,7 @@ select option:disabled {
 .party {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.6rem;
 }
 .party input[type="text"],
 .party input[type="number"],
@@ -1160,14 +1191,33 @@ select option:disabled {
   text-align: right;
 }
 .party .btn {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   padding: 0.35rem 0.6rem;
 }
+.btn.mini,
 .party .btn.mini {
   font-size: 0.8rem;
-  padding: 0.15rem 0.4rem;
+  padding: 0.25rem 0.45rem;
+  min-width: 1.75rem;
   color: var(--ink);
   background: var(--paper-2);
+  border-width: 1px;
+}
+.btn.mini.accent,
+.party .btn.mini.accent {
+  color: var(--accent-ink);
+  background: var(--ember);
+}
+/* A finger needs more to hit than a mouse pointer does. */
+@media (pointer: coarse) {
+  .btn.mini,
+  .party .btn.mini {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+  .party input.cell {
+    min-height: 2.25rem;
+  }
 }
 .party .linkish {
   font: inherit;
@@ -1191,10 +1241,8 @@ select option:disabled {
 .party-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem 1.2rem;
-  align-items: center;
-  padding-bottom: 0.7rem;
-  border-bottom: 2px solid var(--line-soft);
+  gap: 0.4rem 1.2rem;
+  align-items: flex-start;
 }
 .party-bar__group {
   display: flex;
@@ -1256,7 +1304,7 @@ select option:disabled {
 }
 .party .tag {
   margin-left: 0.4rem;
-  font: 400 0.7rem/1 var(--ui);
+  font: 600 0.7rem/1 var(--ui);
   text-transform: uppercase;
   color: var(--ink-soft);
   border: 1px solid var(--line-soft);
@@ -1269,13 +1317,337 @@ select option:disabled {
 .member {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  padding-top: 0.9rem;
+  gap: 0.6rem;
+}
+
+/* Who, HP and the numbers a fight asks for. It stays at the top of the window
+   while the rest of the member scrolls under it. */
+.play-strip {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--paper-sunk);
+  border: 2px solid var(--line);
+}
+.play-strip__who {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.play-strip__name {
+  margin: 0;
+  font: 700 1.15rem/1.15 var(--ui);
+  color: var(--ember);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play-strip__sub {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play-strip__hp {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.play-strip .hp {
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+}
+.hp__now {
+  min-width: 3.4rem;
+  text-align: center;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+.hp__now b {
+  font-size: 1.35rem;
+}
+.party .hp input.cell {
+  width: 3.2rem;
+}
+
+/* One line of small labelled numbers. */
+.cells {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.play-strip .cells {
+  flex: 1 1 19rem;
+}
+.cells > div {
+  padding: 0.15rem 0.3rem 0.2rem;
+  text-align: center;
+  border-right: 1px solid var(--line-soft);
+  min-width: 0;
+}
+.cells > div:last-child {
+  border-right: 0;
+}
+.cells > .cells__first-save {
+  border-left: 1px solid var(--line);
+}
+.cells dt {
+  font: 600 0.64rem/1.2 var(--ui);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.cells dd {
+  margin: 0;
+  font: 700 1.05rem/1.15 var(--ui);
+}
+.cells .mod {
+  margin-left: 0.25rem;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.cells .is-prime dt {
+  color: var(--ember);
+}
+.cells .is-prime dt::after {
+  content: " ★";
+}
+
+.member__cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.7rem 1.2rem;
+  align-items: start;
+}
+.member__main {
+  display: grid;
+  /* The coins table takes the width it needs; the notes get the rest. */
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: 0.7rem 1.2rem;
+  align-items: start;
+  min-width: 0;
+}
+.member__main > * {
+  grid-column: 1 / -1;
+}
+.member__main > .member__block:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.member__ref {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+@container sheet (min-width: 620px) {
+  /* Coins and notes, the last two blocks, sit side by side. */
+  .member__main > .member__block:nth-last-child(-n + 2) {
+    grid-column: auto;
+  }
+  /* The hint wraps to the table's width; it does not set the column's. */
+  .member__main > .member__block:nth-last-child(2) .hint {
+    width: 0;
+    min-width: 100%;
+  }
+}
+@container sheet (min-width: 900px) {
+  .member__cols {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+  .member__ref {
+    padding-left: 1.1rem;
+    border-left: 1px solid var(--line-soft);
+  }
+}
+@container sheet (max-width: 560px) {
+  /* The roster keeps the name, level, HP, AC and speed. */
+  .party-roster .opt {
+    display: none;
+  }
+  .play-strip {
+    padding: 0.3rem 0.4rem;
+  }
+  .play-strip__who {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-basis: 100%;
+  }
+  .play-strip__sub {
+    flex: 1;
+    min-width: 0;
+  }
+  .play-strip__hp {
+    flex: 1 1 100%;
+  }
+  .play-strip__hp > .label {
+    display: none;
+  }
+  .play-strip .hp {
+    flex-wrap: wrap;
+  }
+  .party .hp input.cell {
+    width: 2.6rem;
+  }
+  .cells > div {
+    padding: 0.1rem 0.1rem 0.15rem;
+  }
+  .cells dt {
+    font-size: 0.58rem;
+    letter-spacing: 0;
+  }
+  .cells dd {
+    font-size: 0.95rem;
+  }
+  .cells .mod {
+    margin-left: 0.15rem;
+    font-size: 0.72rem;
+  }
+  /* Narrow number fields, so the gear and coin tables fit the screen. */
+  .party td input.cell {
+    width: 2.7rem;
+  }
+  .party .member td,
+  .party .member th {
+    padding: 0.2rem 0.25rem;
+  }
+}
+
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.4rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.quick__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.quick__val {
+  font-weight: 700;
+}
+.hp-cell {
+  white-space: nowrap;
+}
+.hp-now {
+  display: inline-block;
+  min-width: 3.2rem;
+  text-align: center;
+}
+
+/* A part that opens on a tap: one line closed, its text when open. */
+.fold > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  list-style: none;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::before {
+  content: "▸";
+  flex: none;
+  width: 0.8em;
+  color: var(--ink-soft);
+}
+.fold[open] > summary::before {
+  content: "▾";
+}
+.fold > summary:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 1px;
+}
+.fold .tn {
+  font-weight: 600;
+  color: var(--ember-2);
+}
+.fold > summary .tn {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fold__tag {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+.entry .fold[open] > summary .fold__tag {
+  visibility: hidden;
+}
+.fold > :not(summary) {
+  margin: 0 0 0.5rem 1.3rem;
+}
+ul.entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-soft);
+}
+.entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.entry > .fold {
+  flex: 1;
+  min-width: 0;
+}
+.entry > .btn {
+  margin-top: 0.2rem;
+}
+/* The closed line already gives the name. */
+.entry .trait > .tn,
+.entry .trait > .cast-tag {
+  display: none;
+}
+.fold--menu > summary {
+  padding: 0.35rem 0.2rem;
+  font: 600 0.82rem/1 var(--ui);
+  text-transform: uppercase;
+}
+.fold--menu > :not(summary) {
+  margin: 0.3rem 0 0;
+}
+.member__edit {
   border-top: 2px solid var(--line);
+  padding-top: 0.2rem;
 }
-.member__head .sheet-name {
-  overflow-wrap: anywhere;
+.member__edit > summary {
+  padding: 0.4rem 0;
 }
+.member__edit > :not(summary) {
+  margin: 0.4rem 0 0;
+}
+
 .member__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
@@ -1291,50 +1663,26 @@ select option:disabled {
 }
 .member__block > h3 {
   margin: 0 0 0.45rem;
-  font: 400 0.85rem/1 var(--ui);
+  font: 700 0.78rem/1 var(--ui);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ember-2);
 }
-.member__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.6rem 1rem;
-}
-.member__head .sheet-head {
-  margin-bottom: 0;
-}
-.member__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-/* The member's sheet parts around their controls. The party's own table rules
-   are for its roster and gear lists; the sheet keeps the sheet's. */
-.member-sheet table,
+/* The printed sheet keeps the sheet's table rules, not the party's. */
 .member-print table {
   table-layout: fixed;
 }
-.member-sheet th.num,
-.member-sheet td.num,
 .member-print th.num,
 .member-print td.num {
   width: 3.6rem;
   white-space: normal;
 }
-.member-sheet .ability-flow {
-  margin-top: 0;
-  padding-top: 0.9rem;
-  border-top: 2px solid var(--line-soft);
-}
-/* The whole sheet, gear and notes included, is for "Print sheet" only. */
+/* The whole sheet is for "Print sheet" only. */
 .member-print {
   display: none;
 }
 .load-line {
   margin: 0;
-  font-family: var(--ui);
 }
 .member .status {
   text-transform: none;
@@ -1406,5 +1754,92 @@ ul.chips-list {
   body[data-print="member"] .member {
     padding: 0;
     border: 0;
+  }
+}
+
+/* ── The dice and turn dock ────────────────────────────────────────────── */
+
+/* At the bottom of the window on every tab: a roll or the next turn is one
+   tap away, and the last result shows beside it. */
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.8rem;
+  padding: 0.35rem max(0.6rem, env(safe-area-inset-right)) 0.35rem
+    max(0.6rem, env(safe-area-inset-left));
+  padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  background: var(--paper-sunk);
+  border-top: 2px solid var(--line);
+}
+.dock__last {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dock__last:empty::before {
+  content: "Rolls show here.";
+  color: var(--ink-soft);
+}
+.dock__last .log-title {
+  font: 600 0.72rem/1.2 var(--ui);
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.dock__last .log-result {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dock__last[data-kind="hit"] .log-result,
+.dock__last[data-kind="miss"] .log-result {
+  color: var(--ember);
+}
+.dock__dice {
+  display: flex;
+  gap: 0.25rem;
+}
+.dock__expr {
+  flex-wrap: nowrap;
+}
+.dock__expr input {
+  width: 6.5rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.9rem;
+}
+.dock__turn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dock__count {
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .dock__expr {
+    display: none;
+  }
+  .dock__last {
+    flex-basis: 8rem;
+  }
+  .dock__dice {
+    order: 3;
+    flex: 1 1 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .dock__dice .btn {
+    flex: 1 0 auto;
   }
 }

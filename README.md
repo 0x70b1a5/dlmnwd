@@ -150,7 +150,8 @@ as the index cache; override with `DW_SESSION`). A missing or unreadable state
 file starts a fresh session with a note.
 
 The web app's Table tab has the same clock, with dice, reaction, morale,
-initiative and the wandering check. It also looks up spells, glamours, knacks
+initiative and the wandering check. A dock at the bottom of every tab rolls
+dice, advances the turn and shows the last result. It also looks up spells, glamours, knacks
 and runes in your Player's Book. The clock stays in that browser.
 
 ## The party
@@ -208,8 +209,12 @@ choose Add to party. The party stays in that browser. Export saves it as a
 `party.json` that `dw party` can use (copy it to `dw party path`), and Import
 reads one back. Import also takes filled-in fillable character sheets, like
 `dw party import`; the sheets are read in the browser and go nowhere. The selected member shows
-as one sheet: abilities and saves, then the controls for play, then their
-abilities, spells, glamours, knacks and runes with the book's text. Print sheet
+with the most used parts first. A strip with the name, HP, AC, attack, speed and
+saves stays in view while you scroll. Below it are the abilities, XP and gold,
+then spells, glamours, knacks and runes, then gear, coins and notes. Each
+ability or spell is one line that opens to the book's text. Level up, grants
+and the character's details are under Edit character. The roster has a − and +
+for each member's HP. Print sheet
 prints the whole sheet.
 
 ## Status
@@ -263,7 +268,7 @@ for fuller Hoard/special coverage; `treasure`.
 
 Code: MIT (see `LICENSE`). Game data is yours and not covered here.
 
-Font: [Departure Mono](https://departuremono.com/) by Helena Zhang, under the SIL
+Wordmark font: [Departure Mono](https://departuremono.com/) by Helena Zhang, under the SIL
 Open Font License 1.1, bundled in `web/fonts/` with its licence text. See
 [`NOTICE.md`](NOTICE.md) for the scope.
 

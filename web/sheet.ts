@@ -12,26 +12,10 @@ import { abilityMod } from "../src/rules.ts";
 
 const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
 
-// The pixel faces have no curly quotes, primes, dashes, or ellipsis, so book
-// text using them renders as tofu. Fold those to the ASCII the font does have.
-// On-screen only; the markdown download keeps the originals.
-const TYPO: Record<string, string> = {
-  "\u2018": "'",
-  "\u2019": "'",
-  "\u201C": '"',
-  "\u201D": '"',
-  "\u2032": "'",
-  "\u2033": '"',
-  "\u2013": "-",
-  "\u2014": "-",
-  "\u2026": "...",
-  "\u00A0": " ",
-};
+/** Text as the sheet shows it. A no-break space becomes a plain one, so long
+ *  lines wrap; the book's own quotes and dashes stay. */
 export function clean(s: string): string {
-  return s.replace(
-    /[\u2018\u2019\u201C\u201D\u2032\u2033\u2013\u2014\u2026\u00A0]/g,
-    (ch) => TYPO[ch],
-  );
+  return s.replace(/\u00A0/g, " ");
 }
 
 // ── tiny DOM builder ──────────────────────────────────────────────────────
@@ -47,8 +31,8 @@ export function h(tag: string, attrs: Record<string, string> = {}, ...kids: Chil
 }
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 
-// runescapecn-style badge: a label with an optional emphasised value.
-function badge(label: string, value?: string, variant?: "accent" | "soft"): HTMLElement {
+// A badge: a label with an optional emphasised value.
+export function badge(label: string, value?: string, variant?: "accent" | "soft"): HTMLElement {
   return h(
     "span",
     { class: variant ? `badge badge--${variant}` : "badge" },
@@ -119,16 +103,19 @@ function savesSection(c: SheetData): HTMLElement {
 
 // Skill targets as wrapping chips. Listen/Search/Survival lead, then the rest.
 const SKILL_ORDER = ["Listen", "Search", "Survival"];
-function skillsSection(c: SheetData): HTMLElement {
+/** One badge per skill target. */
+export function skillBadges(skills: Record<string, number>): HTMLElement[] {
   const rank = (n: string): number => {
     const i = SKILL_ORDER.indexOf(n);
     return i < 0 ? SKILL_ORDER.length : i;
   };
-  const entries = Object.entries(c.skills).toSorted(
+  const entries = Object.entries(skills).toSorted(
     (a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]),
   );
-  const badges = entries.map(([k, v]) => badge(k, String(v)));
-  return section("Skill Targets", h("div", { class: "chips" }, ...badges), 4);
+  return entries.map(([k, v]) => badge(k, String(v)));
+}
+function skillsSection(c: SheetData): HTMLElement {
+  return section("Skill Targets", h("div", { class: "chips" }, ...skillBadges(c.skills)), 4);
 }
 
 function subPoint(s: { kind: string; label?: string; body: string }): HTMLElement {
@@ -464,19 +451,15 @@ export function renderSheet(sheet: HTMLElement, c: Character): void {
   renderSheetData(sheet, characterSheet(c));
 }
 
-/** The sheet's parts, top to bottom. The Party tab leaves out what its own
- *  controls already show (`gear`, `notes`) and puts its controls between. */
-export interface SheetParts {
+/** The sheet's parts, top to bottom. */
+interface SheetParts {
   head: HTMLElement;
   statline: HTMLElement;
   grid: HTMLElement;
   abilityFlow: HTMLElement;
 }
 
-export function sheetParts(
-  c: SheetData,
-  { gear = true, notes = true }: { gear?: boolean; notes?: boolean } = {},
-): SheetParts {
+function sheetParts(c: SheetData): SheetParts {
   const meta = h("div", { class: "sheet-sub-row" }, ...c.badges.map((b) => badge(b)));
   const head = h(
     "div",
@@ -494,24 +477,15 @@ export function sheetParts(
     h("div", { class: "stack span-4" }, ...secs.filter((n): n is HTMLElement => n !== null));
   const kindredTraits = traitSection(c.kindredTraits.title, c.kindredTraits.traits);
   const classTraits = traitSection(c.classTraits.title, c.classTraits.traits);
-  const grid = gear
-    ? h(
-        "div",
-        { class: "sheet-grid" },
-        // Physique (tall) sits under the left stack, Languages (short) under the
-        // middle, so the two columns balance beside the tall Persona.
-        stack(abilitiesSection(c), skillsSection(c), kvSection("Physique", c.physique)),
-        stack(savesSection(c), languagesSection(c), personaSection(c)),
-        gearSection(c),
-      )
-    : h(
-        "div",
-        { class: "sheet-grid" },
-        // No gear column: physique and persona take the third.
-        stack(abilitiesSection(c), skillsSection(c)),
-        stack(savesSection(c), languagesSection(c)),
-        stack(kvSection("Physique", c.physique), personaSection(c)),
-      );
+  const grid = h(
+    "div",
+    { class: "sheet-grid" },
+    // Physique (tall) sits under the left stack, Languages (short) under the
+    // middle, so the two columns balance beside the tall Persona.
+    stack(abilitiesSection(c), skillsSection(c), kvSection("Physique", c.physique)),
+    stack(savesSection(c), languagesSection(c), personaSection(c)),
+    gearSection(c),
+  );
   // The prose sections (abilities, spells, glamours, knacks) flow as one block.
   // On screen each keeps its own two-column trait list; in print the whole block
   // becomes a single newspaper flow (down one column, then the next).
@@ -525,7 +499,7 @@ export function sheetParts(
       glamoursSection(c),
       knacksSection(c),
       runesSection(c),
-      notes ? notesSection(c) : null,
+      notesSection(c),
     ].filter((n): n is HTMLElement => n !== null),
   );
   return { head, statline, grid, abilityFlow };

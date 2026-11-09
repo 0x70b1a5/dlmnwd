@@ -2,6 +2,12 @@
 // to them (XP and levels, HP, gear and encumbrance, coins, runes, glamours,
 // knacks, spells, notes). The rules come from the party engine in src/party/,
 // the same code `dw party` and `dw pc` run. The party stays in this browser.
+//
+// A member is laid out by how often each part is used in play. A strip with the
+// name, HP, AC, attack, speed and saves stays in view. Then come the abilities
+// and skills, XP and gold, what the member can cast, the gear, coins and notes.
+// The rules text folds to one line an entry. What a session rarely changes is
+// in a closed "Edit character" fold.
 
 import type { Character } from "../src/gen/character.ts";
 import {
@@ -49,7 +55,15 @@ import {
   safeName,
   storeParty,
 } from "./party-store.ts";
-import { h, renderSheetData, type SheetData, sheetParts } from "./sheet.ts";
+import { abilityMod } from "../src/rules.ts";
+import {
+  castingEntry,
+  h,
+  renderSheetData,
+  type SheetData,
+  skillBadges,
+  traitParagraph,
+} from "./sheet.ts";
 import { block, button, form, numInput, select, textInput } from "./ui.ts";
 
 export interface PartyView {
@@ -70,8 +84,10 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" 
 export interface PartyHooks {
   /** Hears the member count after each change. */
   onCount(n: number): void;
-  /** A member's full sheet, drawn under their controls. */
+  /** A member as sheet data: the rules text to show and the sheet to print. */
   sheet(pc: PC, party: Party, rules: PartyRules): SheetData;
+  /** Hears what each change said, to show where every tab can see it. */
+  onNote?(text: string, kind: "info" | "error"): void;
 }
 
 /** Show the party in `root`. */
@@ -89,6 +105,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     message = { text: (err as Error).message, kind: "error" };
   }
   let selected = party.members.length > 0 ? 0 : -1;
+  // The folds that are open. A redraw builds every fold again, so it reads this.
+  const open = new Set<string>();
 
   /** Run a change, save, and show its message (or its error). */
   // Undo: the party as it was before each recent change, newest last.
@@ -116,6 +134,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       selected = wasSelected;
       message = { text: (err as Error).message, kind: "error" };
     }
+    if (message) hooks.onNote?.(clip(message.text, 160), message.kind);
     render();
   }
 
@@ -126,6 +145,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     selected = last.selected;
     storedOk = storeParty(party);
     message = { text: `Undone: ${clip(last.label, 90)}`, kind: "info" };
+    hooks.onNote?.(message.text, "info");
     render();
   }
 
@@ -229,7 +249,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         for (const m of messages) details.push(`${pc.name}: ${m}`);
         const unset = [!pc.kindred && "kindred", !pc.class && "class"].filter(Boolean);
         if (unset.length > 0 && rules.classes.length > 0)
-          details.push(`${pc.name}: choose the ${unset.join(" and ")} under Character.`);
+          details.push(`${pc.name}: choose the ${unset.join(" and ")} under Edit character.`);
         if (unknownItems.length > 0)
           details.push(`${pc.name}: set the weight of items the book doesn't list under Gear.`);
         for (const p of loadOf(pc, party, rules).problems) details.push(`${pc.name}: ${p}`);
@@ -341,28 +361,72 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           }),
         ),
       ),
-      h("label", { class: "party-bar__group" }, h("span", { class: "label" }, "Encumbrance"), enc),
       h("div", { class: "party-bar__group" }, h("span", { class: "label" }, "Award XP"), award),
       h(
         "div",
         { class: "party-bar__group" },
-        button("Export", () => download("party.json", partyJson(party), "application/json")),
-        button(
-          "Import",
-          () => (file as HTMLInputElement).click(),
-          "btn ghost",
-          "button",
-          "Import a party.json or character sheet PDFs",
+        undoButton(),
+        fold(
+          "bar|more",
+          ["More"],
+          h(
+            "div",
+            { class: "party-bar__group" },
+            h(
+              "label",
+              { class: "party-bar__group" },
+              h("span", { class: "label" }, "Encumbrance"),
+              enc,
+            ),
+            button("Export", () => download("party.json", partyJson(party), "application/json")),
+            button(
+              "Import",
+              () => (file as HTMLInputElement).click(),
+              "btn ghost",
+              "button",
+              "Import a party.json or character sheet PDFs",
+            ),
+          ),
+          "fold fold--menu",
         ),
         file,
-        undoButton(),
       ),
     );
   }
 
+  /** A part that opens on a tap. `key` names it, so it stays open over redraws. */
+  function fold(
+    key: string,
+    summary: (HTMLElement | string | null)[],
+    body: HTMLElement,
+    cls = "fold",
+  ): HTMLElement {
+    const d = h(
+      "details",
+      open.has(key) ? { class: cls, open: "" } : { class: cls },
+      h("summary", { "data-key": key }, ...summary),
+      body,
+    ) as HTMLDetailsElement;
+    d.addEventListener("toggle", () => {
+      if (d.open) open.add(key);
+      else open.delete(key);
+    });
+    return d;
+  }
+
+  /** A change to a member's HP: `spec` is -N, +N or max (applyHp). */
+  const hpChange =
+    (pc: PC, spec: string | (() => string)): (() => void) =>
+    () =>
+      act(() => {
+        applyHp(pc, typeof spec === "string" ? spec : spec());
+        return hpSaid(pc);
+      });
+
   function roster(): HTMLElement {
+    // The columns a narrow screen drops (app.css) are marked `opt`.
     const head = ["Name", "Kindred & Class", "Lvl", "XP", "HP", "AC", "Load", "Speed"];
-    const num = [false, false, true, true, true, true, true, true];
+    const cls = ["", "opt", "num", "num opt", "num", "num", "num opt", "num"];
     const rows = party.members.map((pc, i) => {
       const load = loadOf(pc, party, rules);
       const klass = classOf(rules, pc.class);
@@ -378,24 +442,35 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         "linkish",
       );
       if (i === selected) pickBtn.setAttribute("aria-current", "true");
-      const cells = [
-        `${pc.level}`,
-        `${pc.xp.toLocaleString()}${next !== null ? `/${next.toLocaleString()}` : ""}${canLevel(pc, klass) ? " ★" : ""}`,
-        `${pc.hp}/${pc.maxHp}`,
-        `${computeAc(pc, rules.catalog)}`,
-        party.encumbrance === "slots"
-          ? `${load.equippedSlots}+${load.stowedSlots}`
-          : party.encumbrance === "basic"
-            ? "-"
-            : `${load.weight}`,
-        load.speed > 0 ? `${load.speed}` : "0 !",
-      ];
+      const text = (k: number, value: string): HTMLElement => h("td", { class: cls[k] }, value);
       return h(
         "tr",
         i === selected ? { class: "is-selected" } : {},
         h("td", {}, pickBtn, load.problems.length ? h("span", { class: "warn" }, " !") : null),
-        h("td", {}, kindredClass(pc, rules)),
-        ...cells.map((c) => h("td", { class: "num" }, c)),
+        text(1, kindredClass(pc, rules)),
+        text(2, `${pc.level}`),
+        text(
+          3,
+          `${pc.xp.toLocaleString()}${next !== null ? `/${next.toLocaleString()}` : ""}${canLevel(pc, klass) ? " ★" : ""}`,
+        ),
+        // Damage or heal anyone from here, with no need to select them.
+        h(
+          "td",
+          { class: "num hp-cell" },
+          button("−", hpChange(pc, "-1"), "btn mini", "button", `Damage ${pc.name} by 1`),
+          h("span", { class: pc.hp <= 0 ? "hp-now warn" : "hp-now" }, `${pc.hp}/${pc.maxHp}`),
+          button("+", hpChange(pc, "+1"), "btn mini", "button", `Heal ${pc.name} by 1`),
+        ),
+        text(5, `${computeAc(pc, rules.catalog)}`),
+        text(
+          6,
+          party.encumbrance === "slots"
+            ? `${load.equippedSlots}+${load.stowedSlots}`
+            : party.encumbrance === "basic"
+              ? "-"
+              : `${load.weight}`,
+        ),
+        text(7, load.speed > 0 ? `${load.speed}` : "0 !"),
       );
     });
     const speeds = party.members
@@ -413,7 +488,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           h(
             "thead",
             {},
-            h("tr", {}, ...head.map((t, k) => h("th", num[k] ? { class: "num" } : {}, t))),
+            h("tr", {}, ...head.map((t, k) => h("th", cls[k] ? { class: cls[k] } : {}, t))),
           ),
           h("tbody", {}, ...rows),
         ),
@@ -430,99 +505,413 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
 
   // ── one member ───────────────────────────────────────────────────────────
   function member(pc: PC): HTMLElement {
-    const mod = xpModifier(pc, rules);
-    // The sheet's parts, less what the controls already show (gear, notes):
-    // name and stats, abilities and saves, then the controls, then the
-    // kindred and class abilities, spells, glamours, knacks and runes.
     const data = hooks.sheet(pc, party, rules);
-    const parts = sheetParts(data, { gear: false, notes: false });
     return h(
       "article",
       { class: "member", "aria-label": pc.name },
-      h(
-        "header",
-        { class: "member__head" },
-        parts.head,
-        h(
-          "div",
-          { class: "member__actions" },
-          button("Print sheet", printSheet),
-          button("Download .md", () =>
-            download(
-              `${safeName(pc.name, "character")}.md`,
-              pcMarkdown(pc, party, rules),
-              "text/markdown",
-            ),
-          ),
-          button("Remove", () => {
-            if (!confirm(`Remove ${pc.name} from the party?`)) return;
-            act(() => {
-              party.members = party.members.filter((m) => m !== pc);
-              return `Removed ${pc.name} from the party.`;
-            });
-          }),
-        ),
-      ),
-      parts.statline,
-      h("div", { class: "member-sheet" }, parts.grid),
+      playStrip(pc, data),
       h(
         "div",
-        { class: "member__grid" },
-        block("Hit points", hpBlock(pc)),
-        block(`Experience${mod ? ` (${signed(mod)}%)` : ""}`, xpBlock(pc)),
-        block("Load", loadBlock(pc), "wide"),
-        block("Gear", gearBlock(pc), "wide"),
-        block("Coins", coinBlock(pc), "wide"),
-        block("Runes", runeBlock(pc)),
-        block("Glamours", listBlock(pc, "glamours", rules.glamours)),
-        block("Knacks", listBlock(pc, "knacks", rules.knacks)),
-        block("Spells", listBlock(pc, "spells", [])),
-        block("Notes", notesBlock(pc)),
-        block("Character", detailBlock(pc)),
+        { class: "member__cols" },
+        h(
+          "div",
+          { class: "member__main" },
+          abilityStrip(pc, data),
+          quickRow(pc),
+          ...castBlocks(pc, data),
+          block("Gear", gearBlock(pc)),
+          block("Coins", coinBlock(pc)),
+          block("Notes", notesBlock(pc)),
+        ),
+        reference(pc, data),
       ),
-      h("div", { class: "member-sheet" }, parts.abilityFlow),
+      editFold(pc),
       printable(data),
     );
   }
 
-  function hpBlock(pc: PC): HTMLElement {
-    const n = numInput("", { min: "1", placeholder: "N", "aria-label": "Hit points" });
+  /** The strip that stays in view: who it is, the HP and its controls, then the
+   *  numbers a fight asks for. */
+  function playStrip(pc: PC, data: SheetData): HTMLElement {
+    const load = loadOf(pc, party, rules);
+    const n = numInput("", {
+      min: "1",
+      placeholder: "n",
+      class: "cell",
+      "aria-label": "Hit points to take or heal",
+    });
     const amount = (): number => {
       const v = parseInt(n.value, 10);
       if (!(v > 0)) throw new Error("Enter an amount of HP.");
       return v;
     };
-    const after = () =>
-      `${pc.name}: HP ${pc.hp}/${pc.maxHp}${pc.hp <= 0 ? " (at 0 HP or below)" : ""}`;
+    // Enter in the amount field takes damage, the common case.
+    const hp = form(
+      hpChange(pc, () => `-${amount()}`),
+      button("−", hpChange(pc, "-1"), "btn mini", "button", "Damage 1"),
+      h(
+        "span",
+        { class: pc.hp <= 0 ? "hp__now warn" : "hp__now" },
+        h("b", {}, `${pc.hp}`),
+        `/${pc.maxHp}`,
+      ),
+      button("+", hpChange(pc, "+1"), "btn mini", "button", "Heal 1"),
+      n,
+      button("Dmg", null, "btn mini", "submit", "Damage by the amount"),
+      button(
+        "Heal",
+        hpChange(pc, () => `+${amount()}`),
+        "btn mini",
+        "button",
+        "Heal by the amount",
+      ),
+      button("Full", hpChange(pc, "max"), "btn mini", "button", "Heal to full"),
+    );
+    hp.classList.add("hp");
+    const s = pc.saves;
+    const cells: [string, string][] = [
+      ["AC", `${computeAc(pc, rules.catalog)}`],
+      ["Atk", signed(pc.attack)],
+      ["Spd", load.speed > 0 ? `${load.speed}` : "0 !"],
+      ["Doom", `${s.doom}`],
+      ["Ray", `${s.ray}`],
+      ["Hold", `${s.hold}`],
+      ["Blast", `${s.blast}`],
+      ["Spell", `${s.spell}`],
+    ];
+    if (pc.magicResistance > 0) cells.push(["MR", `+${pc.magicResistance}`]);
     return h(
-      "div",
-      { class: "stack" },
+      "header",
+      { class: "play-strip", "data-area": "strip" },
       h(
         "div",
-        { class: "row" },
-        n,
-        button("Damage", () => act(() => (applyHp(pc, `-${amount()}`), after()))),
-        button("Heal", () => act(() => (applyHp(pc, `+${amount()}`), after()))),
-        button("Full", () => act(() => (applyHp(pc, "max"), after()))),
+        { class: "play-strip__who" },
+        h("h2", { class: "play-strip__name" }, pc.name),
+        h("p", { class: "play-strip__sub" }, data.badges.join(" · ")),
       ),
+      h("div", { class: "play-strip__hp" }, h("span", { class: "label" }, "HP"), hp),
       h(
-        "label",
-        { class: "row" },
-        h("span", { class: "label" }, "Max HP"),
-        numInput(`${pc.maxHp}`, { min: "1", "aria-label": "Maximum HP" }, (v) =>
-          act(() => {
-            pc.maxHp = Math.max(1, v);
-            pc.hp = Math.min(pc.hp, pc.maxHp);
-          }),
+        "dl",
+        { class: "cells" },
+        ...cells.map(([k, v], i) =>
+          h("div", i === 3 ? { class: "cells__first-save" } : {}, h("dt", {}, k), h("dd", {}, v)),
         ),
       ),
     );
   }
 
-  function xpBlock(pc: PC): HTMLElement {
+  /** The six abilities on one line, then the skill targets and languages. */
+  function abilityStrip(pc: PC, data: SheetData): HTMLElement {
+    const prime = new Set(data.prime);
+    const skills = skillBadges(pc.skills);
+    return h(
+      "div",
+      { class: "member__block" },
+      h(
+        "dl",
+        { class: "cells cells--six" },
+        ...ABILITIES.map((a) =>
+          h(
+            "div",
+            prime.has(a) ? { class: "is-prime", title: "A prime ability of the class" } : {},
+            h("dt", {}, a),
+            h(
+              "dd",
+              {},
+              `${pc.scores[a]}`,
+              h("span", { class: "mod" }, signed(abilityMod(pc.scores[a]))),
+            ),
+          ),
+        ),
+      ),
+      skills.length ? h("div", { class: "chips" }, ...skills) : null,
+      pc.languages.length
+        ? h(
+            "p",
+            { class: "hint" },
+            h("span", { class: "label" }, "Languages "),
+            pc.languages.join(", "),
+          )
+        : null,
+    );
+  }
+
+  /** XP and gold, changed where they show. */
+  function quickRow(pc: PC): HTMLElement {
     const klass = classOf(rules, pc.class);
     const next = nextLevelXp(pc, klass);
-    const add = numInput("", { min: "1", placeholder: "XP", "aria-label": "XP to add" });
+    const mod = xpModifier(pc, rules);
+    const add = numInput("", {
+      min: "1",
+      placeholder: "XP",
+      class: "cell",
+      "aria-label": "XP to add",
+    });
+    const addForm = form(
+      () =>
+        act(() => {
+          const v = parseInt(add.value, 10);
+          if (!(v > 0)) throw new Error("Enter the XP to add.");
+          const a = grantXp(pc, v, rules);
+          return `${pc.name} +${a.gained}${a.modifier ? ` (${signed(a.modifier)}%)` : ""} → ${pc.xp.toLocaleString()} XP${a.ready ? " ★ can level up" : ""}`;
+        }),
+      add,
+      button("Add", null, "btn mini", "submit", "Add XP"),
+    );
+    return h(
+      "div",
+      { class: "quick", "data-area": "quick" },
+      h(
+        "div",
+        { class: "quick__group" },
+        h("span", { class: "label" }, `XP${mod ? ` (${signed(mod)}%)` : ""}`),
+        h(
+          "span",
+          { class: "quick__val" },
+          `${pc.xp.toLocaleString()}${next !== null ? ` / ${next.toLocaleString()}` : ""}`,
+        ),
+        addForm,
+        canLevel(pc, klass)
+          ? button("Level up ★", () => doLevelUp(pc, ""), "btn mini accent")
+          : null,
+      ),
+      h(
+        "label",
+        { class: "quick__group" },
+        h("span", { class: "label" }, "Gold"),
+        numInput(`${pc.coins.gp}`, { min: "0", class: "cell", "aria-label": "Gold carried" }, (v) =>
+          act(() => void (pc.coins.gp = Math.max(0, v))),
+        ),
+      ),
+    );
+  }
+
+  /** One line of a list that opens to its rules text, with its action beside. */
+  function entry(
+    key: string,
+    name: string,
+    tag: string,
+    body: HTMLElement,
+    action: HTMLElement | null = null,
+  ): HTMLElement {
+    return h(
+      "li",
+      { class: "entry" },
+      fold(
+        key,
+        [h("span", { class: "tn" }, name), tag ? h("span", { class: "fold__tag" }, tag) : null],
+        body,
+      ),
+      action,
+    );
+  }
+
+  /** What the member can cast or use, each a line that opens to its text. */
+  function castBlocks(pc: PC, data: SheetData): HTMLElement[] {
+    const runes = pc.runes.map((r, i) => {
+      const st = runeStatus(r, pc, party.day, rules.runes);
+      const d = data.runes[i];
+      const use = button(
+        "Use",
+        () => {
+          const force =
+            st.left === 0 && confirm(`${pc.name} has no uses of ${r.name} left. Use it anyway?`);
+          if (st.left === 0 && !force) return;
+          act(() => {
+            const after = useRune(findRune(pc, r.name), pc, party.day, rules.runes, force);
+            return `${pc.name} uses ${r.name}${after.left === null ? "." : `: ${after.left}/${after.limit} left (${after.band?.text}).`}`;
+          });
+        },
+        st.left === 0 ? "btn mini" : "btn mini accent",
+        "button",
+        `Use ${r.name}`,
+      );
+      return entry(
+        `${pc.name}|rune|${r.name}`,
+        `${r.name}${r.times > 1 ? ` ×${r.times}` : ""}`,
+        tags(
+          r.magnitude,
+          st.left === null ? st.band?.text : `${st.left}/${st.limit} left`,
+          d?.duration,
+          d?.range,
+        ),
+        castingEntry(r.name, null, d?.duration ?? null, d?.range ?? null, d?.text || NO_TEXT),
+        use,
+      );
+    });
+    const spells = data.spells.map((sp) =>
+      entry(
+        `${pc.name}|spell|${sp.name}`,
+        sp.name,
+        tags(sp.tradition, sp.rank ? `rank ${sp.rank}` : "", sp.duration, sp.range),
+        castingEntry(sp.name, null, sp.duration, sp.range, sp.body ?? NO_TEXT),
+      ),
+    );
+    const glamours = data.glamours.map((g) =>
+      entry(
+        `${pc.name}|glamour|${g.name}`,
+        g.name,
+        tags(g.duration, g.range),
+        castingEntry(g.name, null, g.duration, g.range, g.body ?? NO_TEXT),
+      ),
+    );
+    const knacks = data.knacks.map((k) =>
+      entry(
+        `${pc.name}|knack|${k.name}`,
+        k.name,
+        clip(k.text, TAG_LENGTH),
+        traitParagraph({ name: k.name, text: k.text || NO_TEXT }),
+      ),
+    );
+    return [
+      list("Spells", spells),
+      list("Runes", runes),
+      list("Glamours", glamours),
+      list("Knacks", knacks),
+    ].filter((b): b is HTMLElement => b !== null);
+  }
+
+  /** The kindred and class abilities, one line each; beside the controls on a
+   *  wide screen. Each opens to its text. */
+  function reference(pc: PC, data: SheetData): HTMLElement {
+    const keys: string[] = [];
+    const groups = [data.kindredTraits, data.classTraits]
+      .filter((g) => g.traits.length > 0)
+      .map((g) =>
+        block(
+          g.title,
+          h(
+            "ul",
+            { class: "entries" },
+            ...g.traits.map((t) => {
+              const key = `${pc.name}|${g.title}|${t.name}`;
+              keys.push(key);
+              return entry(key, t.name, clip(t.text, TAG_LENGTH), traitParagraph(t));
+            }),
+          ),
+        ),
+      );
+    const allOpen = keys.length > 0 && keys.every((k) => open.has(k));
+    const about = [...data.physique, ...data.persona].filter(([, v]) => v);
+    return h(
+      "aside",
+      { class: "member__ref", "aria-label": "Abilities", "data-area": "ref" },
+      keys.length > 1
+        ? h(
+            "div",
+            { class: "row" },
+            button(
+              allOpen ? "Close all" : "Open all",
+              () => {
+                for (const k of keys)
+                  if (allOpen) open.delete(k);
+                  else open.add(k);
+                render();
+              },
+              "btn mini",
+              "button",
+              "Open or close every ability",
+            ),
+          )
+        : null,
+      ...groups,
+      about.length
+        ? fold(
+            `${pc.name}|about`,
+            [
+              h("span", { class: "tn" }, "Physique and persona"),
+              h("span", { class: "fold__tag" }, about.map(([, v]) => v).join(", ")),
+            ],
+            h(
+              "dl",
+              { class: "kv" },
+              ...about.map(([k, v]) => h("div", {}, h("dt", {}, k), h("dd", {}, v))),
+            ),
+          )
+        : null,
+    );
+  }
+
+  /** What a session rarely changes: levels, maximum HP, what the member knows,
+   *  who they are, and the sheet itself. Closed until asked for. */
+  function editFold(pc: PC): HTMLElement {
+    const mod = xpModifier(pc, rules);
+    return fold(
+      `${pc.name}|edit`,
+      [
+        h("span", { class: "tn" }, "Edit character"),
+        h(
+          "span",
+          { class: "fold__tag" },
+          "level up, maximum HP, runes, glamours, knacks, spells, name, print, remove",
+        ),
+      ],
+      h(
+        "div",
+        { class: "member__grid" },
+        block(`Level${mod ? ` (XP ${signed(mod)}%)` : ""}`, levelBlock(pc)),
+        block("Hit points", maxHpBlock(pc)),
+        block("Runes", runeBlock(pc)),
+        block("Glamours", listBlock(pc, "glamours", rules.glamours)),
+        block("Knacks", listBlock(pc, "knacks", rules.knacks)),
+        block("Spells", listBlock(pc, "spells", [])),
+        block("Character", detailBlock(pc)),
+        block(
+          "Sheet",
+          h(
+            "div",
+            { class: "row" },
+            button("Print sheet", printSheet),
+            button("Download .md", () =>
+              download(
+                `${safeName(pc.name, "character")}.md`,
+                pcMarkdown(pc, party, rules),
+                "text/markdown",
+              ),
+            ),
+            button("Remove", () => {
+              if (!confirm(`Remove ${pc.name} from the party?`)) return;
+              act(() => {
+                party.members = party.members.filter((m) => m !== pc);
+                return `Removed ${pc.name} from the party.`;
+              });
+            }),
+          ),
+        ),
+      ),
+      "fold member__edit",
+    );
+  }
+
+  function maxHpBlock(pc: PC): HTMLElement {
+    return h(
+      "label",
+      { class: "row" },
+      h("span", { class: "label" }, "Max HP"),
+      numInput(`${pc.maxHp}`, { min: "1", "aria-label": "Maximum HP" }, (v) =>
+        act(() => {
+          pc.maxHp = Math.max(1, v);
+          pc.hp = Math.min(pc.hp, pc.maxHp);
+        }),
+      ),
+    );
+  }
+
+  /** Level the member up. `roll` is the player's own HP die roll, or "". */
+  function doLevelUp(pc: PC, roll: string): void {
+    const klass = classOf(rules, pc.class);
+    if (!klass) return;
+    if (
+      !canLevel(pc, klass) &&
+      !confirm(`${pc.name} doesn't have the XP for level ${pc.level + 1}. Level up anyway?`)
+    )
+      return;
+    act(() => levelSummary(pc, levelUp(pc, klass, roll ? { hp: parseInt(roll, 10) } : {})));
+  }
+
+  function levelBlock(pc: PC): HTMLElement {
+    const klass = classOf(rules, pc.class);
+    const next = nextLevelXp(pc, klass);
     const hpRoll = numInput("", {
       min: "0",
       placeholder: "roll",
@@ -532,37 +921,13 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const hasTable = !!klass?.advancement?.length;
     const lvl = button(
       ready ? "Level up" : "Level up anyway",
-      () => {
-        if (!klass) return;
-        if (
-          !ready &&
-          !confirm(`${pc.name} doesn't have the XP for level ${pc.level + 1}. Level up anyway?`)
-        )
-          return;
-        act(() =>
-          levelSummary(
-            pc,
-            levelUp(pc, klass, hpRoll.value ? { hp: parseInt(hpRoll.value, 10) } : {}),
-          ),
-        );
-      },
+      () => doLevelUp(pc, hpRoll.value),
       ready ? "btn" : "btn ghost",
     );
     if (!hasTable || next === null) (lvl as HTMLButtonElement).disabled = true;
     return h(
       "div",
       { class: "stack" },
-      form(
-        () =>
-          act(() => {
-            const v = parseInt(add.value, 10);
-            if (!(v > 0)) throw new Error("Enter the XP to add.");
-            const a = grantXp(pc, v, rules);
-            return `${pc.name} +${a.gained}${a.modifier ? ` (${signed(a.modifier)}%)` : ""} → ${pc.xp.toLocaleString()} XP${a.ready ? " ★ can level up" : ""}`;
-          }),
-        add,
-        button("Add XP", null, "btn ghost", "submit"),
-      ),
       h(
         "p",
         { class: "hint" },
@@ -594,23 +959,17 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     for (const [k, [a, b]] of Object.entries(up.extras)) parts.push(`${k} ${a || "-"} → ${b}`);
     const want = allowedCount(pc, rules, "glamours");
     if (want !== null && want > pc.glamours.length)
-      parts.push(`Add ${want - pc.glamours.length} glamour(s)`);
-    if (gainsRunesOnLevel(pc, rules)) parts.push("Roll for a new rune");
+      parts.push(`Add ${want - pc.glamours.length} glamour(s) under Edit character`);
+    if (gainsRunesOnLevel(pc, rules)) parts.push("Roll for a new rune under Edit character");
     parts.push(`Check the class entry for new spells, skills and traits`);
     return parts.join(" · ");
   }
 
-  function loadBlock(pc: PC): HTMLElement {
-    const load = loadOf(pc, party, rules);
-    return h(
-      "div",
-      { class: "stack" },
-      h("p", { class: "load-line" }, describeLoad(load)),
-      ...load.problems.map((p) => h("p", { class: "status", "data-kind": "error" }, p)),
-    );
-  }
-
   function gearBlock(pc: PC): HTMLElement {
+    const load = loadOf(pc, party, rules);
+    // Only the number the party's encumbrance method counts gets a column.
+    const measure: "weight" | "slots" | null =
+      party.encumbrance === "weight" ? "weight" : party.encumbrance === "slots" ? "slots" : null;
     const rows = pc.items.map((it) =>
       h(
         "tr",
@@ -625,8 +984,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           it.ref && it.ref !== it.name ? h("span", { class: "muted" }, ` = ${it.ref}`) : null,
         ),
         h("td", { class: "num" }, itemNum(pc, it, "qty", 0)),
-        h("td", { class: "num" }, itemNum(pc, it, "weight", 0)),
-        h("td", { class: "num" }, itemNum(pc, it, "slots", 0)),
+        measure ? h("td", { class: "num" }, itemNum(pc, it, measure, 0)) : null,
         h(
           "td",
           {},
@@ -708,6 +1066,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     return h(
       "div",
       { class: "stack" },
+      h("p", { class: "load-line" }, describeLoad(load)),
+      ...load.problems.map((p) => h("p", { class: "status", "data-kind": "error" }, p)),
       pc.items.length
         ? h(
             "div",
@@ -723,8 +1083,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
                   {},
                   h("th", {}, "Item"),
                   h("th", { class: "num" }, "Qty"),
-                  h("th", { class: "num" }, "Coins"),
-                  h("th", { class: "num" }, "Slots"),
+                  measure
+                    ? h("th", { class: "num" }, measure === "weight" ? "Coins" : "Slots")
+                    : null,
                   h("th", {}, "Where"),
                   h("th", { class: "num" }, ""),
                 ),
@@ -734,7 +1095,13 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           )
         : h("p", { class: "hint" }, "Carrying nothing."),
       addForm,
-      h("p", { class: "hint" }, "Coins and slots are per item. Click where an item is to move it."),
+      h(
+        "p",
+        { class: "hint" },
+        measure
+          ? `${measure === "weight" ? "Coins" : "Slots"} are per item. Click where an item is to move it.`
+          : "Click where an item is to move it.",
+      ),
     );
   }
 
@@ -805,19 +1172,6 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   function runeBlock(pc: PC): HTMLElement {
     const rows = pc.runes.map((r) => {
       const st = runeStatus(r, pc, party.day, rules.runes);
-      const use = button(
-        "Use",
-        () => {
-          const force =
-            st.left === 0 && confirm(`${pc.name} has no uses of ${r.name} left. Use it anyway?`);
-          if (st.left === 0 && !force) return;
-          act(() => {
-            const after = useRune(findRune(pc, r.name), pc, party.day, rules.runes, force);
-            return `${pc.name} uses ${r.name}${after.left === null ? "." : `: ${after.left}/${after.limit} left (${after.band?.text}).`}`;
-          });
-        },
-        "btn mini",
-      );
       return h(
         "li",
         {},
@@ -830,7 +1184,6 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         h(
           "span",
           { class: "row-end" },
-          use,
           removeBtn(`${r.name}`, () => {
             pc.runes = pc.runes.filter((x) => x !== r);
             return `${pc.name} loses ${r.name}.`;
@@ -849,9 +1202,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     choose.setAttribute("aria-label", "Rune to grant");
     const grant = button("Grant", () =>
       act(() => {
-        const entry = lookupRune(rules.runes, choose.value);
-        if (!choose.value || !entry) throw new Error("Choose a rune to grant.");
-        const { rune, duplicate } = grantRune(pc, entry);
+        const found = lookupRune(rules.runes, choose.value);
+        if (!choose.value || !found) throw new Error("Choose a rune to grant.");
+        const { rune, duplicate } = grantRune(pc, found);
         return duplicate
           ? `${pc.name} is granted ${rune.name} again: its uses are doubled (×${rune.times}).`
           : `${pc.name} is granted ${rune.name} (${rune.magnitude}).`;
@@ -1136,6 +1489,18 @@ function emptyState(): HTMLElement {
   );
 }
 
+const hpSaid = (pc: PC): string =>
+  `${pc.name}: HP ${pc.hp}/${pc.maxHp}${pc.hp <= 0 ? " (at 0 HP or below)" : ""}`;
+const tags = (...parts: (string | null | undefined)[]): string =>
+  parts.filter((p) => p).join(" · ");
+const list = (title: string, rows: HTMLElement[]): HTMLElement | null =>
+  rows.length ? block(title, h("ul", { class: "entries" }, ...rows)) : null;
+
+const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
+/** How much of an entry's text its closed line carries (CSS cuts it to fit). */
+const TAG_LENGTH = 140;
+const NO_TEXT = "The saved book has no text for this.";
+
 function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
@@ -1145,8 +1510,10 @@ function clip(s: string, n: number): string {
 function controlKey(el: Element): string {
   const area =
     el.closest(".member__block")?.querySelector("h3")?.textContent ??
+    el.closest("[data-area]")?.getAttribute("data-area") ??
     (el.closest(".party-bar") ? "bar" : el.closest(".party-roster") ? "roster" : "");
   const label =
+    el.getAttribute("data-key") ??
     el.getAttribute("aria-label") ??
     el.getAttribute("placeholder") ??
     (el.tagName === "BUTTON" ? el.textContent : "") ??
@@ -1154,7 +1521,7 @@ function controlKey(el: Element): string {
   return `${area}|${el.tagName}|${(el as HTMLInputElement).type ?? ""}|${label}`;
 }
 
-const CONTROLS = "input, select, button, textarea";
+const CONTROLS = "input, select, button, textarea, summary";
 
 function focusKey(root: HTMLElement): { key: string; n: number } | null {
   const el = document.activeElement;
