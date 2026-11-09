@@ -696,10 +696,10 @@ select option:disabled {
 }
 .trait .tn {
   font-family: var(--ui);
-  color: var(--ink);
+  color: var(--ember-2);
 }
 /* Trait sub-structure, three visible levels below the section title:
-   1. trait name (.tn)      — bold ink, the entry heading
+   1. trait name (.tn)      — ember, like the section title, the entry heading
    2. sub-heading           — ember, its own line, a named sub-ability
    3. run-in label          — muted ink, subordinate to both
    Sub-points nest under a sub-heading via .trait-nest's indent. */
