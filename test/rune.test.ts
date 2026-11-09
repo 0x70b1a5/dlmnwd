@@ -73,3 +73,50 @@ test("reads frequency phrases", () => {
   expect(parseFrequency("4 times per year")).toEqual({ count: 4, period: "year" });
   expect(parseFrequency("Whenever")).toBeNull();
 });
+
+// Invented rune entries, two columns like the book: heading, Duration, Range,
+// then prose. One name wraps onto two lines; one prose block starts "Duration:".
+const col = (left: string, right = ""): string => left.padEnd(60) + right;
+const entries = [
+  col("Mote of Dew", "Lantern"),
+  col("Duration: 3 Rounds or until sipped"),
+  col("Range: Self"),
+  col("", "Bridge"),
+  col("A bead of dew gathers on the caster’s palm.", "Duration: 1 hour"),
+  col("Drinking: One who drinks it is refreshed.", "Range: 60′"),
+  col("Duration: The bead dries away when", "A bridge of lamplight spans a gap."),
+  col("the sun next rises.", "Weight: It bears one creature at a time."),
+  "",
+  col("Whisper Knot"),
+  col("Duration: 1 day"),
+  col("Range: Touch"),
+  col("A knot that repeats one whispered word."),
+].join("\n");
+
+test("reads each rune's own entry", () => {
+  const r = parseRunes([page, entries]);
+  const by = (n: string) => r.runes.find((x) => x.name === n);
+  expect(by("Mote of Dew")).toEqual({
+    name: "Mote of Dew",
+    magnitude: "faint",
+    duration: "3 Rounds or until sipped",
+    range: "Self",
+    body:
+      "A bead of dew gathers on the caster’s palm.\n" +
+      "Drinking: One who drinks it is refreshed.\n" +
+      "Duration: The bead dries away when the sun next rises.",
+  });
+  // The wrapped heading is one name, and it ends the entry above it.
+  expect(by("Lantern Bridge")).toMatchObject({
+    duration: "1 hour",
+    range: "60′",
+    body: "A bridge of lamplight spans a gap.\nWeight: It bears one creature at a time.",
+  });
+  expect(by("Whisper Knot")).toMatchObject({
+    duration: "1 day",
+    range: "Touch",
+    body: "A knot that repeats one whispered word.",
+  });
+  // A rune with no entry keeps only its name and magnitude.
+  expect(by("Starfall")).toEqual({ name: "Starfall", magnitude: "blazing" });
+});

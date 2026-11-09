@@ -1,11 +1,18 @@
-// Parse the fairy-rune tables from the Player's Book: the rune lists by
-// magnitude (a 3-up "<MAGNITUDE> RUNES" table), the usage-frequency table, and
-// the 2d6 rune-granted table with its level modifiers. Magnitudes are
-// discovered from the table headings, never hardcoded. Pure (no Node APIs).
+// Parse the fairy runes from the Player's Book: the rune lists by magnitude (a
+// 3-up "<MAGNITUDE> RUNES" table), the usage-frequency table, the 2d6
+// rune-granted table with its level modifiers, and each rune's own entry.
+// Magnitudes are discovered from the table headings, never hardcoded. Pure (no
+// Node APIs).
+
+import { parseCastEntries } from "./entries.ts";
 
 export interface RuneEntry {
   name: string;
   magnitude: string; // lower-case, as headed in the book ("lesser")
+  /** The rune's own entry, when the book has one (entries.ts). */
+  duration?: string | null;
+  range?: string | null;
+  body?: string | null;
 }
 
 /** How often a rune may be used: `count` times per `period`. */
@@ -59,6 +66,15 @@ export function parseRunes(pages: string[]): RuneRules {
       if (/\bRUNE GRANTED\b/.test(line) && out.granted.length === 0)
         out.granted = grantedTable(lines, h);
     });
+  }
+  // Each rune's own entry: Duration, Range and what it does.
+  const entries = parseCastEntries(
+    pages,
+    out.runes.map((r) => r.name),
+  );
+  for (const r of out.runes) {
+    const e = entries.get(r.name.toLowerCase());
+    if (e) Object.assign(r, { duration: e.duration, range: e.range, body: e.body });
   }
   // The level modifier to the grant roll is prose: "Level 3–5 gain a +1 bonus".
   const magnitudes = [...new Set(out.runes.map((r) => r.magnitude))];
