@@ -151,7 +151,6 @@ export async function extractPagesEmulated(bytes: Uint8Array): Promise<string[]>
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = pdfjs.getDocument({
     data: bytes,
-    isEvalSupported: false,
     useSystemFonts: true,
   });
   const doc = await task.promise;
@@ -162,7 +161,8 @@ export async function extractPagesEmulated(bytes: Uint8Array): Promise<string[]>
   // oxlint-disable no-await-in-loop
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
-    pages.push(layoutPage(await pageItems(page), page.view[3]));
+    // The patched pdf.js adds fields its own types do not know (see PdfPage).
+    pages.push(layoutPage(await pageItems(page as unknown as PdfPage), page.view[3]));
     page.cleanup();
   }
   // oxlint-enable no-await-in-loop

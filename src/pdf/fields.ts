@@ -4,7 +4,7 @@
 
 export async function readFormFields(bytes: Uint8Array): Promise<Record<string, string>> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const task = pdfjs.getDocument({ data: bytes, isEvalSupported: false, verbosity: 0 });
+  const task = pdfjs.getDocument({ data: bytes, verbosity: 0 });
   const doc = await task.promise;
   const objects = (await doc.getFieldObjects()) as Record<string, { value?: unknown }[]> | null;
   await task.destroy();

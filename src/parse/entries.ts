@@ -82,8 +82,10 @@ export function parseCastEntries(pages: string[], names: string[]): Map<string, 
         const t = lines[j].trim();
         // Only the lines above the prose: a "Duration: …" paragraph in the
         // prose is part of the text.
-        const dm = body.length === 0 && duration === null && t.match(/^Duration:\s*(.+?)\s*$/);
-        const rm = body.length === 0 && range === null && t.match(/^Range:\s*(.+?)\s*$/);
+        const dm: RegExpMatchArray | false | null =
+          body.length === 0 && duration === null && t.match(/^Duration:\s*(.+?)\s*$/);
+        const rm: RegExpMatchArray | false | null =
+          body.length === 0 && range === null && t.match(/^Range:\s*(.+?)\s*$/);
         if (dm) duration = dm[1];
         else if (rm) range = rm[1];
         else if (t && !/^\d{1,3}$/.test(t)) body.push(t);

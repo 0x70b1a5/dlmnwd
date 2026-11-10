@@ -337,7 +337,7 @@ const backgroundPage = [
 test("parses the kindred background table", () => {
   const [k] = parseKindreds(
     [trinketSection, trinketPage, backgroundPage],
-    [{ id: "testkin", name: "Testkin" }],
+    [{ id: "testkin", name: "Testkin", kindredType: "Mortal" }],
   );
   expect(k.backgrounds.length).toBeGreaterThanOrEqual(10);
   expect(k.backgrounds).toContain("Farmer");
@@ -345,6 +345,9 @@ test("parses the kindred background table", () => {
 });
 
 test("backgrounds is empty when no background table is present", () => {
-  const [k] = parseKindreds([namesPage, personaPage], [{ id: "testkin", name: "Testkin" }]);
+  const [k] = parseKindreds(
+    [namesPage, personaPage],
+    [{ id: "testkin", name: "Testkin", kindredType: "Mortal" }],
+  );
   expect(k.backgrounds).toEqual([]);
 });

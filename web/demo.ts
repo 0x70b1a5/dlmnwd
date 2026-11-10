@@ -61,6 +61,8 @@ const klass = {
       text: "If the party becomes lost, there is a 2-in-6 chance the hedgewise finds the path again.",
     },
   ],
+  startingEquipment: null,
+  spellBooks: [],
 } as ParsedClass;
 
 export const demoCharacter: Character = {

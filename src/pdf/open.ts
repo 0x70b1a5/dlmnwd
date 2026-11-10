@@ -41,7 +41,7 @@ export function openPdfPage(pdfPath: string, page: number): boolean {
   const render = spawnSync(
     "pdftoppm",
     ["-png", "-singlefile", "-r", "160", "-f", String(page), "-l", String(page), pdfPath, prefix],
-    { stderr: "inherit" },
+    { stdio: ["ignore", "ignore", "inherit"] },
   );
   if (render.status !== 0) return false;
 

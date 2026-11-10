@@ -5,6 +5,7 @@ import {
   APPEARANCE_FIELDS,
   type Character,
   PERSONA_ORDER,
+  type Physique,
   resolvedKindredTraits,
 } from "../src/gen/character.ts";
 import { parseStatBlock, structureTrait } from "../src/parse/traits.ts";
@@ -228,7 +229,7 @@ function kvSection(title: string, rows: [string, string][]): HTMLElement | null 
 /** Physique: rolled body stats plus the appearance persona fields. A field
  *  with no value stays as a blank line to fill in. */
 export function physiqueRows(
-  physique: Partial<Record<string, string>> | undefined,
+  physique: Partial<Physique> | undefined,
   persona: Record<string, string>,
 ): [string, string][] {
   return [

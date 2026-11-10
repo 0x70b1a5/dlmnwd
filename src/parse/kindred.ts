@@ -78,7 +78,7 @@ export function discoverKindreds(pages: string[]): KindredRule[] {
     // can stay contiguous in the other. Trying both maximises recall.
     const sectionPages = pages.slice(starts[s], to);
     const flat = sectionPages.join("\n");
-    const cols = sectionPages.flatMap(splitTwoColumns).join("\n");
+    const cols = sectionPages.flatMap((pg) => splitTwoColumns(pg)).join("\n");
     const header = flat.match(/\b([A-Z][A-Z’'-]+) NAMES\b/);
     if (!header) continue;
     const name = header[1].charAt(0) + header[1].slice(1).toLowerCase();

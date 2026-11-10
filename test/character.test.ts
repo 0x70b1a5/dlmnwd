@@ -167,7 +167,7 @@ test("adventuring items empty when no table provided", () => {
 test("trinket is rolled from kindred trinket table", () => {
   const c = generate(kindred, klass, { adventuringItems: ITEMS });
   expect(c.trinket).not.toBeNull();
-  expect(kindred.trinkets).toContain(c.trinket);
+  expect(kindred.trinkets).toContain(c.trinket!);
 });
 
 test("trinket is null when kindred has no trinket table", () => {
@@ -179,7 +179,7 @@ test("trinket is null when kindred has no trinket table", () => {
 test("background is rolled from kindred background table", () => {
   const c = generate(kindred, klass, { adventuringItems: ITEMS });
   expect(c.background).not.toBeNull();
-  expect(kindred.backgrounds).toContain(c.background);
+  expect(kindred.backgrounds).toContain(c.background!);
 });
 
 test("background is null when kindred has no background table", () => {
