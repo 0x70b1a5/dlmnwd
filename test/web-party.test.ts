@@ -82,6 +82,12 @@ test("a member with no saves gets the class table's, and the tab says so", async
 
 test("a changed Save Target field is saved and the view keeps the member", async () => {
   await mount({ name: "Orla Venn", class: "warden", level: 2, saves: saves(11) });
+  // A closed fold holds no fields until it is opened.
+  expect(byLabel("Doom Save Target")).toBeUndefined();
+  const edit = root.querySelector<HTMLDetailsElement>(".member__edit")!;
+  edit.querySelector("summary")!.click();
+  edit.open = true;
+  edit.dispatchEvent(new Event("toggle"));
   const doom = byLabel("Doom Save Target") as HTMLInputElement;
   doom.value = "7";
   doom.dispatchEvent(new Event("change", { bubbles: true }));
@@ -114,6 +120,19 @@ test("prepare, cast and rest change the slots and what the tab shows", async () 
   byLabel("Clear Brine Thread from its slot").click();
   expect(stored().prepared).toHaveLength(1);
   expect(root.textContent).toContain("1 slot free");
+});
+
+test("a change keeps the focus, and the text typed in another part", async () => {
+  await mount({ name: "Orla Venn", class: "warden", level: 2, hp: 5, maxHp: 9, saves: saves(11) });
+  const xp = root.querySelector<HTMLInputElement>(".party-bar input")!;
+  xp.value = "250";
+  const heal = byLabel("Heal Orla Venn by 1");
+  heal.focus();
+  heal.click();
+  expect(stored().hp).toBe(6);
+  expect(byLabel("Heal Orla Venn by 1")).toBe(heal);
+  expect(document.activeElement).toBe(heal);
+  expect(root.querySelector<HTMLInputElement>(".party-bar input")!.value).toBe("250");
 });
 
 test("undo puts the party back as it was before the last change", async () => {

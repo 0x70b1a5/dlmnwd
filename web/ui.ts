@@ -1,5 +1,6 @@
 // Small form helpers the Party and Table views share. Pure DOM.
 
+import { on } from "./morph.ts";
 import { h } from "./sheet.ts";
 
 export function block(title: string, body: HTMLElement, size: "wide" | "" = ""): HTMLElement {
@@ -23,13 +24,13 @@ export function button(
     { type, class: cls, ...(ariaLabel ? { "aria-label": ariaLabel } : {}) },
     label,
   );
-  if (onClick) b.addEventListener("click", onClick);
+  if (onClick) on(b, "click", onClick);
   return b;
 }
 
 export function form(onSubmit: () => void, ...kids: (HTMLElement | null)[]): HTMLElement {
   const f = h("form", { class: "row" }, ...kids);
-  f.addEventListener("submit", (e) => {
+  on(f, "submit", (e) => {
     e.preventDefault();
     onSubmit();
   });
@@ -49,7 +50,7 @@ export function numInput(
     ...attrs,
   }) as HTMLInputElement;
   if (onChange)
-    el.addEventListener("change", () => {
+    on(el, "change", () => {
       const v = parseInt(el.value, 10);
       if (Number.isFinite(v)) afterFocusMoves(() => onChange(v));
     });
@@ -58,7 +59,7 @@ export function numInput(
 
 export function textInput(value: string, onChange: (v: string) => void): HTMLInputElement {
   const el = h("input", { type: "text", value }) as HTMLInputElement;
-  el.addEventListener("change", () => afterFocusMoves(() => onChange(el.value)));
+  on(el, "change", () => afterFocusMoves(() => onChange(el.value)));
   return el;
 }
 
@@ -74,7 +75,7 @@ export function select(
       h("option", v === value ? { value: v, selected: "" } : { value: v }, label),
     ),
   ) as HTMLSelectElement;
-  if (onChange) el.addEventListener("change", () => afterFocusMoves(() => onChange(el.value)));
+  if (onChange) on(el, "change", () => afterFocusMoves(() => onChange(el.value)));
   return el;
 }
 

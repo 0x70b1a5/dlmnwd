@@ -74,6 +74,7 @@ import {
   traitParagraph,
 } from "./sheet.ts";
 import { repairParty, savesMissing } from "../src/party/repair.ts";
+import { morph, on } from "./morph.ts";
 import { block, button, form, numInput, select, textInput } from "./ui.ts";
 
 export interface PartyView {
@@ -117,6 +118,12 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     message = { text: (err as Error).message, kind: "error" };
   }
   let selected = party.members.length > 0 ? 0 : -1;
+  // The control the user last used, and whether the change it asked for was
+  // made. The fields beside it are then empty again on the next draw.
+  let used: Element | null = null;
+  let changed = false;
+  for (const type of ["click", "change", "submit", "keydown"])
+    root.addEventListener(type, (e) => void (used = e.target as Element), true);
   // The folds that are open. A redraw builds every fold again, so it reads this.
   const open = new Set<string>();
 
@@ -141,6 +148,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       if (history.length > HISTORY) history.shift();
       storedOk = storeParty(party);
       message = note?.text ? note : null;
+      changed = true;
     } catch (err) {
       party = normalizeParty(JSON.parse(before), "The party");
       selected = wasSelected;
@@ -165,10 +173,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     if (selected >= party.members.length) selected = party.members.length - 1;
     onCount(party.members.length);
     const pc = party.members[selected];
-    // Redrawing replaces every control, so keep the focus and scroll position.
-    const focus = focusKey(root);
-    const scroll = [window.scrollX, window.scrollY] as const;
-    root.replaceChildren(
+    const next = h(
+      "div",
+      {},
       h(
         "div",
         { class: "party" },
@@ -178,8 +185,12 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         pc ? member(pc) : null,
       ),
     );
-    if (focus) restoreFocus(root, focus);
-    window.scrollTo(scroll[0], scroll[1]);
+    // Change the drawn view in place (morph.ts): what is the same stays, with
+    // its focus and scroll position. A field keeps the text typed in it,
+    // unless it is in the part of the view that made this change.
+    const sent = changed ? used?.closest(PARTS) : null;
+    morph(root, next, { spent: (el) => !!sent && sent.contains(el) });
+    changed = false;
   }
 
   function statusLine(): HTMLElement {
@@ -333,7 +344,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       multiple: "",
       hidden: "",
     });
-    file.addEventListener("change", () => {
+    on(file, "change", () => {
       const files = [...((file as HTMLInputElement).files ?? [])];
       (file as HTMLInputElement).value = "";
       if (files.length === 0) return;
@@ -427,17 +438,26 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   function fold(
     key: string,
     summary: (HTMLElement | string | null)[],
-    body: HTMLElement,
+    body: HTMLElement | (() => HTMLElement),
     cls = "fold",
   ): HTMLElement {
+    // A body given as a function is built only while the fold is open, so a
+    // closed fold costs one line.
+    const built = (): HTMLElement => (typeof body === "function" ? body() : body);
+    const head = h("summary", { "data-key": key }, ...summary);
     const d = h(
       "details",
       open.has(key) ? { class: cls, open: "" } : { class: cls },
-      h("summary", { "data-key": key }, ...summary),
-      body,
+      head,
+      typeof body !== "function" || open.has(key) ? built() : null,
     ) as HTMLDetailsElement;
-    d.addEventListener("toggle", () => {
-      if (d.open) open.add(key);
+    // The view keeps the drawn elements, so read them from the event.
+    on(head, "click", (e) => {
+      const el = (e.currentTarget as HTMLElement).parentElement!;
+      if (el.childElementCount < 2) el.append(built());
+    });
+    on(d, "toggle", (e) => {
+      if ((e.currentTarget as HTMLDetailsElement).open) open.add(key);
       else open.delete(key);
     });
     return d;
@@ -537,7 +557,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const data = hooks.sheet(pc, party, rules);
     return h(
       "article",
-      { class: "member", "aria-label": pc.name },
+      // The key makes another member a new element, with no state of this one.
+      { class: "member", "aria-label": pc.name, "data-key": pc.name },
       playStrip(pc, data),
       h(
         "div",
@@ -607,7 +628,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     if (pc.magicResistance > 0) cells.push(["MR", `+${pc.magicResistance}`]);
     return h(
       "header",
-      { class: "play-strip", "data-area": "strip" },
+      { class: "play-strip" },
       h(
         "div",
         { class: "play-strip__who" },
@@ -685,7 +706,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     );
     return h(
       "div",
-      { class: "quick", "data-area": "quick" },
+      { class: "quick" },
       h(
         "div",
         { class: "quick__group" },
@@ -942,7 +963,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const about = [...data.physique, ...data.persona].filter(([, v]) => v);
     return h(
       "aside",
-      { class: "member__ref", "aria-label": "Abilities", "data-area": "ref" },
+      { class: "member__ref", "aria-label": "Abilities" },
       keys.length > 1
         ? h(
             "div",
@@ -993,39 +1014,40 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           "level up, maximum HP, runes, glamours, knacks, spells, name, print, remove",
         ),
       ],
-      h(
-        "div",
-        { class: "member__grid" },
-        block(`Level${mod ? ` (XP ${signed(mod)}%)` : ""}`, levelBlock(pc)),
-        block("Hit points", maxHpBlock(pc)),
-        block("Runes", runeBlock(pc)),
-        block("Glamours", listBlock(pc, "glamours", rules.glamours)),
-        block("Knacks", listBlock(pc, "knacks", rules.knacks)),
-        block("Spells known", listBlock(pc, "spells", spellNames(pc))),
-        block("Character", detailBlock(pc)),
-        block(
-          "Sheet",
-          h(
-            "div",
-            { class: "row" },
-            button("Print sheet", printSheet),
-            button("Download .md", () =>
-              download(
-                `${safeName(pc.name, "character")}.md`,
-                pcMarkdown(pc, party, rules),
-                "text/markdown",
+      () =>
+        h(
+          "div",
+          { class: "member__grid" },
+          block(`Level${mod ? ` (XP ${signed(mod)}%)` : ""}`, levelBlock(pc)),
+          block("Hit points", maxHpBlock(pc)),
+          block("Runes", runeBlock(pc)),
+          block("Glamours", listBlock(pc, "glamours", rules.glamours)),
+          block("Knacks", listBlock(pc, "knacks", rules.knacks)),
+          block("Spells known", listBlock(pc, "spells", spellNames(pc))),
+          block("Character", detailBlock(pc)),
+          block(
+            "Sheet",
+            h(
+              "div",
+              { class: "row" },
+              button("Print sheet", printSheet),
+              button("Download .md", () =>
+                download(
+                  `${safeName(pc.name, "character")}.md`,
+                  pcMarkdown(pc, party, rules),
+                  "text/markdown",
+                ),
               ),
+              button("Remove", () => {
+                if (!confirm(`Remove ${pc.name} from the party?`)) return;
+                act(() => {
+                  party.members = party.members.filter((m) => m !== pc);
+                  return `Removed ${pc.name} from the party.`;
+                });
+              }),
             ),
-            button("Remove", () => {
-              if (!confirm(`Remove ${pc.name} from the party?`)) return;
-              act(() => {
-                party.members = party.members.filter((m) => m !== pc);
-                return `Removed ${pc.name} from the party.`;
-              });
-            }),
           ),
         ),
-      ),
       "fold member__edit",
     );
   }
@@ -1547,9 +1569,11 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       el.setAttribute("aria-label", label);
       return h("label", { class: "field" }, h("span", { class: "label" }, label), el);
     };
-    const retainer = h("input", { type: "checkbox" }) as HTMLInputElement;
-    retainer.checked = pc.retainer;
-    retainer.addEventListener("change", () => act(() => void (pc.retainer = retainer.checked)));
+    const retainer = h(
+      "input",
+      pc.retainer ? { type: "checkbox", checked: "" } : { type: "checkbox" },
+    ) as HTMLInputElement;
+    on(retainer, "change", () => act(() => void (pc.retainer = retainer.checked)));
     return h(
       "div",
       { class: "stack" },
@@ -1679,40 +1703,10 @@ const SAVE_LABEL = { doom: "Doom", ray: "Ray", hold: "Hold", blast: "Blast", spe
 const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
 /** How much of an entry's text its closed line carries (CSS cuts it to fit). */
 const TAG_LENGTH = 140;
+/** The parts of the view whose fields a change empties. */
+const PARTS = "form, .row, .play-strip, .party-bar, .member__block";
 const NO_TEXT = "The saved book has no text for this.";
 
 function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
-}
-
-/** A name for the focused control that survives a redraw: its block, its kind,
- *  its label, and which of the controls with that name it is. */
-function controlKey(el: Element): string {
-  const area =
-    el.closest(".member__block")?.querySelector("h3")?.textContent ??
-    el.closest("[data-area]")?.getAttribute("data-area") ??
-    (el.closest(".party-bar") ? "bar" : el.closest(".party-roster") ? "roster" : "");
-  const label =
-    el.getAttribute("data-key") ??
-    el.getAttribute("aria-label") ??
-    el.getAttribute("placeholder") ??
-    (el.tagName === "BUTTON" ? el.textContent : "") ??
-    "";
-  return `${area}|${el.tagName}|${(el as HTMLInputElement).type ?? ""}|${label}`;
-}
-
-const CONTROLS = "input, select, button, textarea, summary";
-
-function focusKey(root: HTMLElement): { key: string; n: number } | null {
-  const el = document.activeElement;
-  if (!el || !root.contains(el) || !el.matches(CONTROLS)) return null;
-  const key = controlKey(el);
-  const same = [...root.querySelectorAll(CONTROLS)].filter((c) => controlKey(c) === key);
-  return { key, n: same.indexOf(el) };
-}
-
-function restoreFocus(root: HTMLElement, focus: { key: string; n: number }): void {
-  const same = [...root.querySelectorAll(CONTROLS)].filter((c) => controlKey(c) === focus.key);
-  const el = (same[focus.n] ?? same.at(-1)) as HTMLElement | undefined;
-  el?.focus({ preventScroll: true });
 }

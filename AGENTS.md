@@ -205,9 +205,14 @@ reason to exist; never add an upload affordance.
   (each a line that opens to the book's text), gear, coins and notes. Kindred
   and class abilities fold to one line each, in a right-hand column on a wide
   screen. A closed "Edit character" fold holds what a session rarely changes.
-  The view is drawn again on each change, so the open folds are kept in an
-  `open` set and each control gets a stable key (`controlKey`) to keep the
-  focus. Layout changes use `@container sheet` queries, not the window width.
+  The view is built again on each change, and `web/morph.ts` changes the drawn
+  tree into the new one in place. The elements that are the same stay, so the
+  focus, the scroll position and the text typed in another part are kept. A
+  form control is the exception: the new one goes in and takes the old one's
+  state. Add a listener with `on` (`morph.ts`), not `addEventListener`, and
+  read a kept element from the event (`e.currentTarget`). The open folds are
+  kept in an `open` set. A fold whose body is a function builds it only while
+  open. Layout changes use `@container sheet` queries, not the window width.
   `web/member-sheet.ts` turns a member into `SheetData` for the rules text and
   for "Print sheet", which prints a hidden copy of the whole sheet
   (`body[data-print="member"]` in `app.css`).
