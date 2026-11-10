@@ -75,6 +75,7 @@ import {
 } from "./sheet.ts";
 import { repairParty, savesMissing } from "../src/party/repair.ts";
 import { morph, on } from "./morph.ts";
+import { partyLink } from "./party-link.ts";
 import { block, button, form, numInput, select, textInput } from "./ui.ts";
 
 export interface PartyView {
@@ -84,10 +85,15 @@ export interface PartyView {
   add(character: Character): string;
   /** Select a member by name, for when the view is shown. */
   select(name: string): void;
+  /** Offer a party from elsewhere (a link) in place of this one. */
+  offer(party: Party, from: string): void;
 }
 
 /** A note under the party bar; `details` lists what a change found on the way. */
 type Message = { text: string; kind: "info" | "error"; details?: string[] };
+
+/** Chat apps and mail cut links longer than about this. */
+const LONG_LINK = 6000;
 
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -299,6 +305,52 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     });
   }
 
+  /** Put a party from a file or a link in place of this one. The user agrees
+   *  first when there is a party to lose, and Undo brings it back. */
+  function take(p: Party, from: string): void {
+    const now = plural(party.members.length, "member");
+    if (
+      party.members.length > 0 &&
+      !confirm(
+        `Replace the party here (${now}) with ${from} (${plural(p.members.length, "member")})?`,
+      )
+    )
+      return;
+    act(() => {
+      party = p;
+      selected = party.members.length > 0 ? 0 : -1;
+      return {
+        text: `Imported ${plural(party.members.length, "member")} from ${from}.`,
+        kind: "info",
+        details: repairParty(party, rules),
+      };
+    });
+  }
+
+  /** Copy a link that holds the party, to open in another browser. */
+  async function copyLink(): Promise<void> {
+    const say = (text: string, kind: Message["kind"] = "info"): void => {
+      message = { text, kind };
+      hooks.onNote?.(clip(text, 160), kind);
+      render();
+    };
+    try {
+      const link = await partyLink(party, location.href);
+      const long = link.length > LONG_LINK ? " It is long: if an app cuts it, use Export." : "";
+      const what = "It holds the party as it is now, and later changes do not follow it.";
+      try {
+        await navigator.clipboard.writeText(link);
+        say(`A link to this party is copied. ${what}${long}`);
+      } catch {
+        // No clipboard (an old browser, or a page not served over https).
+        prompt("Copy this link to the party:", link);
+        say(`${what}${long}`);
+      }
+    } catch (err) {
+      say(`The link could not be made (${(err as Error).message}). Use Export.`, "error");
+    }
+  }
+
   // ── the whole party ──────────────────────────────────────────────────────
   function partyBar(): HTMLElement {
     const enc = select(
@@ -365,18 +417,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       }
       const f = files[0];
       void readPartyFile(f).then(
-        (p) => {
-          if (party.members.length > 0 && !confirm(`Replace the party with ${f.name}?`)) return;
-          act(() => {
-            party = p;
-            selected = party.members.length > 0 ? 0 : -1;
-            return {
-              text: `Imported ${plural(party.members.length, "member")} from ${f.name}.`,
-              kind: "info",
-              details: repairParty(party, rules),
-            };
-          });
-        },
+        (p) => take(p, f.name),
         (err: Error) => {
           message = { text: err.message, kind: "error" };
           render();
@@ -419,6 +460,13 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
               enc,
             ),
             button("Export", () => download("party.json", partyJson(party), "application/json")),
+            button(
+              "Copy link",
+              () => void copyLink(),
+              "btn ghost",
+              "button",
+              "Copy a link that opens this party in another browser",
+            ),
             button(
               "Import",
               () => (file as HTMLInputElement).click(),
@@ -1628,6 +1676,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   render();
 
   return {
+    offer: take,
     setRules(r) {
       rules = r;
       // Members saved with no Save Targets take them from the book's tables.

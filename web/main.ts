@@ -26,6 +26,7 @@ import {
 import { emptyRules } from "../src/party/rules.ts";
 import { memberSheet } from "./member-sheet.ts";
 import { mountParty } from "./party.ts";
+import { partyFromLink } from "./party-link.ts";
 import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
 import { renderEmpty, renderSheet } from "./sheet.ts";
@@ -229,6 +230,23 @@ const party = mountParty($<HTMLElement>("party"), {
   spell: (name) => (book ? spellMap(book).get(name.toLowerCase()) : undefined),
   onNote: (text, kind) => table.say("Party", text, kind === "error" ? "miss" : ""),
 });
+
+// A link made with "Copy link" holds a party after the `#`. Offer it, then take
+// it out of the address, so a reload does not ask again.
+async function partyInAddress(): Promise<void> {
+  if (!location.hash.includes("party=")) return;
+  const hash = location.hash;
+  history.replaceState(null, "", location.pathname + location.search);
+  showTab("party");
+  try {
+    const linked = await partyFromLink(hash);
+    if (linked) party.offer(linked, "the link");
+  } catch (err) {
+    table.say("Party", (err as Error).message, "miss");
+  }
+}
+void partyInAddress();
+window.addEventListener("hashchange", () => void partyInAddress());
 
 // ── generate & download ────────────────────────────────────────────────────
 generateBtn.addEventListener("click", () => {

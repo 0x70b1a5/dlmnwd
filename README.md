@@ -215,7 +215,10 @@ The web app has the same party under its Party tab. Generate a character, then
 choose Add to party. The party stays in that browser. Export saves it as a
 `party.json` that `dw party` can use (copy it to `dw party path`), and Import
 reads one back. Import also takes filled-in fillable character sheets, like
-`dw party import`; the sheets are read in the browser and go nowhere. The selected member shows
+`dw party import`; the sheets are read in the browser and go nowhere. Copy link (under More)
+gives a link that opens the party in another browser. The party is in the link
+itself, after the `#`, so no server gets it. The link is a copy: it does not
+follow later changes. The selected member shows
 with the most used parts first. A strip with the name, HP, AC, attack, speed and
 saves stays in view while you scroll. Below it are the abilities, XP and gold,
 then spells, glamours, knacks and runes, then gear, coins and notes. Each

@@ -196,6 +196,9 @@ reason to exist; never add an upload affordance.
   rules from the saved book (`web/book.ts`). `web/party-store.ts` keeps the
   party in the browser's local storage and exports or imports the CLI's
   `party.json`. An unreadable saved party is copied aside, never overwritten.
+  `web/party-link.ts` packs the party into a link, after the `#`, which a
+  browser does not send to a server. "Copy link" makes it, and `main.ts` offers
+  the party of an opened link. The link is a copy, not a live connection.
   Import also reads fillable sheet PDFs with the CLI's `src/pdf/fields.ts` and
   `party/import.ts`. Import messages are plain statements; the CLI and the web
   app each add their own fix hints (`unknownItems`, an unset kindred or class).

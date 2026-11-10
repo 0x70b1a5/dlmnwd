@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { ParsedClass } from "../src/parse/class.ts";
+import { normalizeParty } from "../src/party/model.ts";
 import { emptyRules, type PartyRules } from "../src/party/rules.ts";
 import type { PartyView } from "../web/party.ts";
 
@@ -133,6 +134,23 @@ test("a change keeps the focus, and the text typed in another part", async () =>
   expect(byLabel("Heal Orla Venn by 1")).toBe(heal);
   expect(document.activeElement).toBe(heal);
   expect(root.querySelector<HTMLInputElement>(".party-bar input")!.value).toBe("250");
+});
+
+test("a party from a link takes the place of this one when the user agrees", async () => {
+  await mount({ name: "Orla Venn", class: "warden", level: 2, saves: saves(11) });
+  const linked = normalizeParty({ members: [{ name: "Bram" }, { name: "Cole" }] }, "test");
+  const asked: string[] = [];
+  globalThis.confirm = (q?: string) => (asked.push(q ?? ""), false);
+  view.offer(linked, "the link");
+  expect(stored().name).toBe("Orla Venn");
+  expect(asked[0]).toContain("1 member");
+  expect(asked[0]).toContain("2 members");
+  globalThis.confirm = () => true;
+  view.offer(linked, "the link");
+  expect(stored().name).toBe("Bram");
+  expect(root.textContent).toContain("Imported 2 members from the link");
+  byLabel("Undo").click();
+  expect(stored().name).toBe("Orla Venn");
 });
 
 test("undo puts the party back as it was before the last change", async () => {
