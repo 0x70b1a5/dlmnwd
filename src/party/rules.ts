@@ -20,6 +20,14 @@ export interface PartyRules {
   kindreds: ParsedKindred[];
   glamours: string[];
   knacks: string[];
+  /** Every spell in the book: its name, tradition and Rank. */
+  spells: SpellRef[];
+}
+
+export interface SpellRef {
+  name: string;
+  tradition: string | null;
+  rank: number | null;
 }
 
 export function defaultEnc(): EncumbranceRules {
@@ -47,6 +55,7 @@ export function emptyRules(): PartyRules {
     kindreds: [],
     glamours: [],
     knacks: [],
+    spells: [],
   };
 }
 
@@ -59,6 +68,7 @@ export function rulesFromLookups(
   get: <T>(name: string) => T | null,
   classes: ParsedClass[],
   kindreds: ParsedKindred[],
+  spells: SpellRef[] = [],
 ): PartyRules {
   const r = emptyRules();
   const enc = get<Partial<EncumbranceRules>>("encumbrance") ?? {};
@@ -79,6 +89,7 @@ export function rulesFromLookups(
     kindreds,
     glamours: get<string[]>("glamours") ?? [],
     knacks: get<string[]>("knacks") ?? [],
+    spells: spells.map((s) => ({ name: s.name, tradition: s.tradition, rank: s.rank })),
   };
 }
 

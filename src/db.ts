@@ -244,6 +244,17 @@ export function monsterPickerRows(db: Database): string[] {
   });
 }
 
+/** Every spell's name, tradition and Rank, for the party rules. */
+export function spellRefs(
+  db: Database,
+): { name: string; tradition: string | null; rank: number | null }[] {
+  return db.query("SELECT name, tradition, rank FROM spells ORDER BY rank, name").all() as {
+    name: string;
+    tradition: string | null;
+    rank: number | null;
+  }[];
+}
+
 export function spellNames(db: Database): string[] {
   return (db.query("SELECT name FROM spells ORDER BY name").all() as { name: string }[]).map(
     (r) => r.name,

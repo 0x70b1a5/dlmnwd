@@ -17,6 +17,15 @@ import { firstName } from "../party/import.ts";
 import { formatCoins, loadOf, pcMarkdown, showParty, showPc } from "../party/render.ts";
 import { classOf, type PartyRules } from "../party/rules.ts";
 import { grantRune, lookupRune, rollRuneGrant, runeStatus, useRune } from "../party/runes.ts";
+import {
+  castSpell,
+  clearSpell,
+  isCaster,
+  preparable,
+  prepareSpell,
+  slotUse,
+  traditionSpells,
+} from "../party/spells.ts";
 import { findMember, type Party, type PC, saveParty, type Where } from "../party/store.ts";
 import { canLevel, grantXp, levelUp, nextLevelXp } from "../party/xp.ts";
 import { partyContext } from "./party.ts";
@@ -38,7 +47,12 @@ const USAGE = `usage: dw pc <name> [command]      (name: any unambiguous part of
   rune add|rm <name>             a duplicate grant doubles its uses
   rune use <name> [--force]      spend a use; limits follow magnitude and level
   rune learn [--mod=N]           roll 2d6 + level bonus on the rune-granted table
-  knack add|rm <name>, spell add|rm <name>
+  knack add|rm <name>
+  spell                          spell slots by Rank, and the spells ready or cast
+  spell add|rm <name>            a spell the character knows (a spell book)
+  prepare <spell> [--force]      put a spell in a slot of its Rank for the day
+  cast <spell>                   cast a prepared spell (dw party rest brings it back)
+  spell clear <spell>|all        take a spell out of its slot
   note add <text> | note rm <n>
   set k=v…                       name=, player=, alignment=, background=, moon_sign=,
                                    affiliation=, kindred=, class=, level=, ac_bonus=,
@@ -236,7 +250,10 @@ export function cmdPc(args: string[]): void {
       return listCmd(pc, party, rules, "knacks", rules.knacks, rest, args);
     case "spell":
     case "spells":
-      return listCmd(pc, party, rules, "spells", [], rest, args);
+      return spellCmd(pc, party, rules, rest, args);
+    case "prepare":
+    case "cast":
+      return spellCmd(pc, party, rules, [verb, ...rest], args);
 
     case "rune":
     case "runes":
@@ -399,6 +416,68 @@ function listCmd(
   }
   console.log(`${cap(field)}: ${list.join(", ") || "none"}`);
   if (known.length) console.log(`(the book lists: ${known.join(", ")})`);
+}
+
+/** Spells: the known list, the day's slots, and what is ready or cast. */
+function spellCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: string[]): void {
+  const [op, ...words] = rest;
+  const name = words.join(" ").trim();
+  const show = () => {
+    for (const u of slotUse(pc, rules))
+      console.log(`  Rank ${u.rank}: ${u.filled}/${u.slots} prepared, ${u.ready} ready`);
+    for (const p of pc.prepared)
+      console.log(`  ${p.cast ? "✗" : "●"} ${p.name}${p.cast ? " (cast)" : ""}`);
+  };
+  switch (op) {
+    case "add":
+    case "rm":
+    case "remove": {
+      const mine = traditionSpells(pc, rules);
+      const known = (mine.length ? mine : rules.spells).map((s) => s.name);
+      listCmd(pc, party, rules, "spells", known, rest, args);
+      return;
+    }
+    case "prepare":
+    case "ready": {
+      const hit = prepareSpell(pc, rules, name, args.includes("--force"));
+      saveParty(party);
+      console.log(`${pc.name} prepares ${hit}.`);
+      show();
+      return;
+    }
+    case "cast": {
+      const hit = castSpell(pc, name);
+      saveParty(party);
+      console.log(`${pc.name} casts ${hit}.`);
+      show();
+      return;
+    }
+    case "clear":
+    case "unprepare": {
+      if (name.toLowerCase() === "all") pc.prepared = [];
+      else clearSpell(pc, name);
+      saveParty(party);
+      show();
+      return;
+    }
+    case undefined:
+    case "list": {
+      console.log(`Spells: ${pc.spells.join(", ") || "none"}`);
+      if (pc.prepared.length === 0 && slotUse(pc, rules).length === 0) {
+        if (!isCaster(pc, rules)) console.log("  (this class has no spells-per-day table indexed)");
+        return;
+      }
+      show();
+      const can = preparable(pc, rules);
+      if (can.length)
+        console.log(
+          `Can prepare: ${can.map((s) => (s.rank ? `${s.name} (${s.rank})` : s.name)).join(", ")}`,
+        );
+      return;
+    }
+    default:
+      throw new Error("usage: dw pc <name> spell [add|rm|prepare|cast|clear <spell>]");
+  }
 }
 
 function cap(s: string): string {

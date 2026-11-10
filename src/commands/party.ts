@@ -4,6 +4,7 @@ import { ensureBuilt } from "../build.ts";
 import { openDb } from "../db.ts";
 import { pdfPath } from "../pdf/config.ts";
 import { readFormFields } from "../pdf/fields.ts";
+import { newDay } from "../party/actions.ts";
 import { firstName, pcFromSheet } from "../party/import.ts";
 import { loadOf, showParty } from "../party/render.ts";
 import { emptyRules, type PartyRules } from "../party/rules.ts";
@@ -32,7 +33,7 @@ const USAGE = `usage: dw party [command]
                                applying each one's XP modifier  (--each: give everyone
                                the full amount)
   enc [weight|slots|basic]   show or set the encumbrance method
-  rest [days]                advance the campaign day (resets daily rune uses)
+  rest [days]                advance the campaign day (daily rune uses and cast spells come back)
   path                       where the party file lives
 
 Then manage each member with dw pc <name> …  (dw pc help)`;
@@ -202,9 +203,12 @@ export async function cmdParty(args: string[]): Promise<void> {
     case "day": {
       const days = rest[0] ? parseInt(rest[0], 10) : 1;
       if (!Number.isFinite(days) || days < 1) throw new Error("usage: dw party rest [days]");
-      party.day += days;
+      const back = newDay(party, days);
       saveParty(party);
-      console.log(`Day ${party.day}. Daily rune uses are refreshed.`);
+      console.log(
+        `Day ${party.day}. Daily rune uses are refreshed.` +
+          (back ? ` ${back} cast spell${back === 1 ? " is" : "s are"} ready again.` : ""),
+      );
       return;
     }
 

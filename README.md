@@ -183,7 +183,10 @@ dw pc pip glamour add "<glamour>"    # or: glamour add --random / glamour rm …
 dw pc pip rune add "<rune>"          # a duplicate grant doubles its uses
 dw pc pip rune use <rune>            # refuses when today's (week's, level's…) uses are spent
 dw pc pip rune learn                 # 2d6 + level bonus on the rune-granted table
-dw party rest                           # next day: daily rune uses come back
+dw pc pip spell                      # spell slots by Rank, and what can fill them
+dw pc pip prepare "<spell>"          # fill a slot of the spell's Rank (spell clear: empty it)
+dw pc pip cast <spell>               # spend it for the day
+dw party rest                           # next day: rune uses and cast spells come back
 
 dw party enc slots                 # weight (default), slots, or basic
 dw pc pip sheet --out=PCs/Pip.md  # a vault Markdown sheet
@@ -199,6 +202,10 @@ Rune usage counts against the party's day (`dw party rest`) and the caster's
 current level, so "once per day", "once per week", "once per Level", and
 "once ever" each behave as written. A year is taken to be 365 days.
 
+Spell slots come from the class's spells-per-day table in your book. A class
+that keeps spell books prepares from the spells the character knows
+(`spell add`). Any other caster prepares from the spells of its tradition.
+
 The party is saved at `~/.local/share/dw/party.json` (or `$XDG_DATA_HOME/dw/`;
 override with `DW_PARTY`). It's your campaign state, not a cache, so it is
 written atomically and never replaced if it can't be read. `dw party path`
@@ -212,7 +219,9 @@ reads one back. Import also takes filled-in fillable character sheets, like
 with the most used parts first. A strip with the name, HP, AC, attack, speed and
 saves stays in view while you scroll. Below it are the abilities, XP and gold,
 then spells, glamours, knacks and runes, then gear, coins and notes. Each
-ability or spell is one line that opens to the book's text. Level up, grants
+ability or spell is one line that opens to the book's text. A caster sees the
+slots of each Rank, a Cast button on each prepared spell, and the spells that
+can fill a free slot. Rest brings the cast spells back. Level up, grants
 and the character's details are under Edit character. The roster has a − and +
 for each member's HP. Print sheet
 prints the whole sheet.

@@ -5,6 +5,7 @@ import { coinCount, computeAc, computeLoad, describeLoad, type Load } from "./en
 import { savesMissing } from "./repair.ts";
 import { classOf, kindredOf, type PartyRules } from "./rules.ts";
 import { runeStatus } from "./runes.ts";
+import { slotLine } from "./spells.ts";
 import { ABILITIES, type Coins, COIN_KINDS, type InvItem, type Party, type PC } from "./model.ts";
 import { canLevel, nextLevelXp, xpModifier } from "./xp.ts";
 
@@ -116,6 +117,12 @@ export function showPc(pc: PC, party: Party, rules: PartyRules): string {
   }
   if (pc.knacks.length) out.push(`Knacks ${pc.knacks.join(", ")}`);
   if (pc.spells.length) out.push(`Spells ${pc.spells.join(", ")}`);
+  const slots = slotLine(pc, rules);
+  if (slots) out.push(`Spell slots ${slots}`);
+  if (pc.prepared.length)
+    out.push(
+      `Prepared ${pc.prepared.map((p) => (p.cast ? `${p.name} (cast)` : p.name)).join(", ")}`,
+    );
   if (pc.notes.length) {
     out.push("Notes");
     for (const n of pc.notes) out.push(`  ${n}`);

@@ -54,6 +54,8 @@ export interface ParsedClass {
   runeOnLevel?: boolean;
   /** Magnitude of the random rune known at level 1, when the class has one. */
   startingRune?: string;
+  /** Spells per day: one row for each level from 1, one count for each Rank. */
+  spellsPerDay?: number[][];
 }
 
 const ABILITY_BY_NAME: Record<string, Ability> = {
@@ -105,9 +107,66 @@ export function parseClasses(pages: string[]): ParsedClass[] {
       startingEquipment,
       spellBooks,
       ...runeRules(pages, page),
+      ...spellsPerDayOf(pages, page),
     });
   }
   return out;
+}
+
+function spellsPerDayOf(pages: string[], page: number): Pick<ParsedClass, "spellsPerDay"> {
+  for (const pg of [page, page + 1]) {
+    const table = pg < pages.length ? parseSpellsPerDay(pages[pg]) : null;
+    if (table) return { spellsPerDay: table };
+  }
+  return {};
+}
+
+/**
+ * Parse a "spells per day" table: a "Spell Rank" line, then a "Level 1 2 3 …"
+ * header, then a row for each level. Cells are read by column, because the
+ * text can give some rows across and the others one column at a time. Other
+ * text beside the table is outside its columns and is not read.
+ */
+export function parseSpellsPerDay(page: string): number[][] | null {
+  const lines = page.split("\n");
+  for (let h = 0; h < lines.length - 1; h++) {
+    if (!/\bSpell\s+Rank\b/i.test(lines[h])) continue;
+    const head = lines[h + 1];
+    const level = /\bLevel\b/i.exec(head);
+    if (!level) continue;
+    // The Rank numbers after "Level": 1, 2, 3 … (another table can follow them).
+    const ranks: number[] = [];
+    const digits = /\d+/g;
+    digits.lastIndex = level.index;
+    for (let m = digits.exec(head); m; m = digits.exec(head)) {
+      if (parseInt(m[0], 10) !== ranks.length + 1) break;
+      ranks.push(m.index + (m[0].length - 1) / 2);
+    }
+    if (ranks.length === 0) continue;
+    const centres = [level.index + (level[0].length - 1) / 2, ...ranks];
+    const left = Math.max(0, level.index - 3);
+    const right = centres[centres.length - 1] + 3;
+
+    const cols: string[][] = centres.map(() => []);
+    scan: for (let i = h + 2; i < lines.length; i++) {
+      const cell = /\S+/g;
+      for (let m = cell.exec(lines[i]); m; m = cell.exec(lines[i])) {
+        if (m.index < left || m.index > right) continue;
+        const mid = m.index + (m[0].length - 1) / 2;
+        const col = centres.findIndex((c) => Math.abs(c - mid) <= 2.5);
+        // Anything that is not a cell of this table ends it.
+        if (col < 0 || !/^(\d+|[–—-])$/.test(m[0])) break scan;
+        cols[col].push(m[0]);
+      }
+    }
+    const rows: number[][] = [];
+    for (let r = 0; r < cols[0].length; r++) {
+      if (parseInt(cols[0][r], 10) !== r + 1 || cols.some((c) => c.length <= r)) break;
+      rows.push(cols.slice(1).map((c) => parseInt(c[r], 10) || 0));
+    }
+    if (rows.length > 0) return rows;
+  }
+  return null;
 }
 
 /** Does the class text grant a chance at a new rune each time a level is gained,

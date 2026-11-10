@@ -71,6 +71,7 @@ export function bookRules(book: Book): PartyRules {
     <T>(name: string) => (book.partyLookups[name] as T | undefined) ?? null,
     book.classes,
     book.kindreds,
+    book.spells,
   );
 }
 

@@ -1621,8 +1621,24 @@ ul.entries {
   flex: 1;
   min-width: 0;
 }
-.entry > .btn {
+.entry > .btn,
+.entry__acts {
   margin-top: 0.2rem;
+}
+.entry__acts {
+  display: flex;
+  gap: 0.25rem;
+}
+.slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.9rem;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.slot--out {
+  color: var(--ink-soft);
 }
 /* The closed line already gives the name. */
 .entry .trait > .tn,

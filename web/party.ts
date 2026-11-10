@@ -9,7 +9,7 @@
 // The rules text folds to one line an entry. What a session rarely changes is
 // in a closed "Edit character" fold.
 
-import type { Character } from "../src/gen/character.ts";
+import type { Character, SpellDetail } from "../src/gen/character.ts";
 import {
   allowedCount,
   applyHp,
@@ -18,8 +18,17 @@ import {
   gainsRunesOnLevel,
   learnName,
   type NameList,
+  newDay,
   setField,
 } from "../src/party/actions.ts";
+import {
+  castSpell,
+  learnsSpells,
+  preparable,
+  prepareSpell,
+  slotUse,
+  traditionSpells,
+} from "../src/party/spells.ts";
 import { computeAc, describeLoad } from "../src/party/encumbrance.ts";
 import { characterToPc } from "../src/party/from-character.ts";
 import { type ImportResult, pcFromSheet } from "../src/party/import.ts";
@@ -89,6 +98,8 @@ export interface PartyHooks {
   sheet(pc: PC, party: Party, rules: PartyRules): SheetData;
   /** Hears what each change said, to show where every tab can see it. */
   onNote?(text: string, kind: "info" | "error"): void;
+  /** A spell's entry in the saved book, for a spell the member can prepare. */
+  spell?(name: string): SpellDetail | undefined;
 }
 
 /** Show the party in `root`. */
@@ -371,8 +382,11 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         h("span", { class: "label" }, `Day ${party.day}`),
         button("Rest", () =>
           act(() => {
-            party.day += 1;
-            return `Day ${party.day}. Daily rune uses are refreshed.`;
+            const back = newDay(party);
+            return (
+              `Day ${party.day}. Daily rune uses are refreshed.` +
+              (back ? ` ${plural(back, "cast spell")} ready again.` : "")
+            );
           }),
         ),
       ),
@@ -750,14 +764,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         use,
       );
     });
-    const spells = data.spells.map((sp) =>
-      entry(
-        `${pc.name}|spell|${sp.name}`,
-        sp.name,
-        tags(sp.tradition, sp.rank ? `rank ${sp.rank}` : "", sp.duration, sp.range),
-        castingEntry(sp.name, null, sp.duration, sp.range, sp.body ?? NO_TEXT),
-      ),
-    );
+    const spells = spellRows(pc, data);
     const glamours = data.glamours.map((g) =>
       entry(
         `${pc.name}|glamour|${g.name}`,
@@ -775,11 +782,140 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       ),
     );
     return [
-      list("Spells", spells),
+      spells,
       list("Runes", runes),
       list("Glamours", glamours),
       list("Knacks", knacks),
     ].filter((b): b is HTMLElement => b !== null);
+  }
+
+  /**
+   * The member's spells. A class with spells per day shows its slots by Rank,
+   * the spells in them (each with Cast), and the spells that can fill a slot.
+   * Any other member shows the spells they know.
+   */
+  function spellRows(pc: PC, data: SheetData): HTMLElement | null {
+    const detail = (name: string): SheetData["spells"][number] =>
+      data.spells.find((s) => s.name === name) ??
+      hooks.spell?.(name) ?? {
+        name,
+        tradition: null,
+        rank: null,
+        duration: null,
+        range: null,
+        body: null,
+      };
+    const line = (key: string, name: string, state: string, action: HTMLElement | null) => {
+      const sp = detail(name);
+      return entry(
+        key,
+        name,
+        tags(state, sp.rank ? `rank ${sp.rank}` : sp.tradition, sp.duration, sp.range),
+        castingEntry(sp.name, null, sp.duration, sp.range, sp.body ?? NO_TEXT),
+        action,
+      );
+    };
+    const use = slotUse(pc, rules);
+    if (use.length === 0 && pc.prepared.length === 0)
+      return list(
+        "Spells",
+        pc.spells.map((name) => line(`${pc.name}|spell|${name}`, name, "", null)),
+      );
+
+    const ready = pc.prepared.map((p, i) =>
+      line(
+        `${pc.name}|prepared|${p.name}|${i}`,
+        p.name,
+        p.cast ? "cast" : "",
+        h(
+          "span",
+          { class: "entry__acts" },
+          p.cast
+            ? null
+            : button(
+                "Cast",
+                () => act(() => `${pc.name} casts ${castSpell(pc, p.name)}.`),
+                "btn mini accent",
+                "button",
+                `Cast ${p.name}`,
+              ),
+          button(
+            "×",
+            () =>
+              act(() => {
+                pc.prepared.splice(i, 1);
+                return `${pc.name} clears ${p.name} from its slot.`;
+              }),
+            "btn mini ghost",
+            "button",
+            `Clear ${p.name} from its slot`,
+          ),
+        ),
+      ),
+    );
+    const free = new Map(use.map((u) => [u.rank, u.slots - u.filled]));
+    const pool = preparable(pc, rules);
+    const choices = pool.map((s) => {
+      const room = s.rank === null || (free.get(s.rank) ?? 0) > 0;
+      const add = button(
+        "Prepare",
+        () => act(() => `${pc.name} prepares ${prepareSpell(pc, rules, s.name)}.`),
+        "btn mini",
+        "button",
+        `Prepare ${s.name}`,
+      ) as HTMLButtonElement;
+      add.disabled = !room;
+      return line(`${pc.name}|can|${s.name}`, s.name, "", add);
+    });
+    const freeSlots = [...free.values()].reduce((a, n) => a + Math.max(0, n), 0);
+    const slots = h(
+      "p",
+      { class: "slots" },
+      ...use.map((u) =>
+        h(
+          "span",
+          { class: u.ready > 0 ? "slot" : "slot slot--out" },
+          `Rank ${u.rank} `,
+          h("b", {}, `${u.ready}/${u.slots}`),
+        ),
+      ),
+      h("span", { class: "hint" }, "ready to cast. Rest brings a cast spell back."),
+    );
+    const none =
+      pool.length === 0
+        ? h(
+            "p",
+            { class: "hint" },
+            learnsSpells(pc, rules)
+              ? "No spell known for these slots. Add spells under Edit character."
+              : "The saved book gives no spell for these slots. Add spells under Edit character.",
+          )
+        : null;
+    return block(
+      "Spells",
+      h(
+        "div",
+        { class: "stack" },
+        slots,
+        ready.length ? h("ul", { class: "entries" }, ...ready) : null,
+        none,
+        choices.length
+          ? fold(
+              `${pc.name}|prepare`,
+              [
+                h("span", { class: "tn" }, "Prepare a spell"),
+                h(
+                  "span",
+                  { class: "fold__tag" },
+                  freeSlots > 0 ? `${plural(freeSlots, "slot")} free` : "every slot is full",
+                ),
+              ],
+              h("ul", { class: "entries" }, ...choices),
+              "fold fold--menu",
+            )
+          : null,
+      ),
+    );
   }
 
   /** The kindred and class abilities, one line each; beside the controls on a
@@ -865,7 +1001,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         block("Runes", runeBlock(pc)),
         block("Glamours", listBlock(pc, "glamours", rules.glamours)),
         block("Knacks", listBlock(pc, "knacks", rules.knacks)),
-        block("Spells", listBlock(pc, "spells", [])),
+        block("Spells known", listBlock(pc, "spells", spellNames(pc))),
         block("Character", detailBlock(pc)),
         block(
           "Sheet",
@@ -1264,7 +1400,10 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const addForm = form(
       () =>
         act(() => {
-          const added = learnName(pc, field, known, input.value);
+          // A spell of the table's own making is not in the book.
+          const added = learnName(pc, field, known, input.value, {
+            force: field === "spells",
+          });
           return `${pc.name} learns ${added}.`;
         }),
       input,
@@ -1304,6 +1443,12 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           )
         : null,
     );
+  }
+
+  /** The book's spells the member can learn: their tradition's, else all. */
+  function spellNames(pc: PC): string[] {
+    const mine = traditionSpells(pc, rules);
+    return (mine.length ? mine : rules.spells).map((s) => s.name);
   }
 
   function notesBlock(pc: PC): HTMLElement {

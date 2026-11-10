@@ -226,6 +226,7 @@ const party = mountParty($<HTMLElement>("party"), {
     partyCount.textContent = n > 0 ? `(${n})` : "";
   },
   sheet: (pc, members, rules) => memberSheet(pc, members, rules, book),
+  spell: (name) => (book ? spellMap(book).get(name.toLowerCase()) : undefined),
   onNote: (text, kind) => table.say("Party", text, kind === "error" ? "miss" : ""),
 });
 

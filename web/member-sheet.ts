@@ -87,7 +87,8 @@ export function memberSheet(pc: PC, party: Party, rules: PartyRules, book: Book 
     persona: [...extras, ...personaRows(pc.persona)],
     kindredTraits: { title: `${kindredName} Abilities`, traits: kindred?.traits ?? [] },
     classTraits: { title: `${className} Abilities`, traits: klass?.traits ?? [] },
-    spells: pc.spells.map(
+    // The spells known, then any spell in a slot that is not one of them.
+    spells: [...new Set([...pc.spells, ...pc.prepared.map((p) => p.name)])].map(
       (name) =>
         spells.get(name.toLowerCase()) ?? {
           name,

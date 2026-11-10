@@ -44,6 +44,12 @@ export interface KnownRune {
   uses: { day: number; level: number }[];
 }
 
+export interface PreparedSpell {
+  name: string;
+  /** Cast today: the slot is spent until the next rest. */
+  cast: boolean;
+}
+
 export interface Saves {
   doom: number;
   ray: number;
@@ -80,6 +86,8 @@ export interface PC {
   glamours: string[];
   runes: KnownRune[];
   spells: string[];
+  /** The spells made ready for the day, one entry for each slot they fill. */
+  prepared: PreparedSpell[];
   knacks: string[];
   notes: string[];
   /** Rolled persona fields by name (appearance, manner, …), when generated. */
@@ -138,6 +146,7 @@ export function blankPc(name: string): PC {
     glamours: [],
     runes: [],
     spells: [],
+    prepared: [],
     knacks: [],
     notes: [],
     persona: {},

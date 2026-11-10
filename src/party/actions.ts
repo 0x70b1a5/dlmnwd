@@ -9,6 +9,7 @@ import {
   type CoinKind,
   type Coins,
   type KnownRune,
+  type Party,
   type PC,
 } from "./model.ts";
 import { fillFromClass } from "./repair.ts";
@@ -104,6 +105,8 @@ export function forgetName(pc: PC, field: NameList, name: string): string {
   if (!q || !hit)
     throw new Error(`${pc.name} doesn't know a ${field.replace(/s$/, "")} matching "${name}".`);
   pc[field] = list.filter((l) => l !== hit);
+  // A spell no longer known leaves its slot too.
+  if (field === "spells") pc.prepared = pc.prepared.filter((p) => p.name !== hit);
   return hit;
 }
 
@@ -230,4 +233,18 @@ export function setField(pc: PC, rules: PartyRules, kv: string): void {
     default:
       throw new Error(`Unknown field "${k}".`);
   }
+}
+
+/**
+ * Advance the campaign day after a rest. Daily rune uses follow the day, and
+ * each prepared spell is ready again. Returns how many spells came back.
+ */
+export function newDay(party: Party, days = 1): number {
+  party.day += days;
+  let back = 0;
+  for (const pc of party.members) {
+    back += pc.prepared.filter((p) => p.cast).length;
+    for (const p of pc.prepared) p.cast = false;
+  }
+  return back;
 }

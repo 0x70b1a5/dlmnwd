@@ -34,7 +34,8 @@ bun run fmt:check
 bun run lint                     # lint (oxlint)
 bun run lint:fix
 
-bun run check                    # THE CI GATE: fmt --check + lint + test + web:build
+bun run typecheck                # tsc (no emit) over src, test, web and scripts
+bun run check                    # THE CI GATE: fmt --check + lint + tsc + test + web:build
 
 bun run web:dev                  # dev server on web/index.html
 bun run web:mock                 # mock page (prebuilt fixture, no PDF needed)
@@ -46,9 +47,9 @@ A tracked pre-commit hook (`.githooks/pre-commit`) runs `fmt`, re-stages, then
 `lint`. It blocks the commit on lint errors. `bun install`'s `prepare` script wires
 `core.hooksPath` to `.githooks`, so a fresh clone is set up automatically.
 
-There is no `tsc` typecheck step — `tsconfig.json` has `noEmit: true` and includes
-only `src` and `test` (not `web/`, `proto/`, or `scripts/`). oxlint is the type-aware
-check that actually runs.
+`tsc` is the type check (`tsconfig.json` has `noEmit: true`). It covers `src`,
+`test`, `web` and `scripts`, with the DOM library for the web code. `proto/` is
+not included.
 
 ## Architecture
 
@@ -242,6 +243,15 @@ advancement rows live on `ParsedClass.advancement`. Missing tables fall back to
 the generic defaults in `src/rules.ts`. Tests build `PartyRules` by hand with
 invented content (`test/party.test.ts`, `test/party-actions.test.ts`).
 
+Spells for the day live in `party/spells.ts`. A class page's "spells per day"
+table (`parseSpellsPerDay` in `parse/class.ts`) gives `ParsedClass.spellsPerDay`.
+`PartyRules.spells` holds each spell's name, tradition and Rank. The tradition
+a class casts from is the one its ability text names most; no name is fixed in
+code. A member's `prepared` list holds one entry for each slot filled, with a
+`cast` flag that `newDay` (`actions.ts`) clears. A class with spell books
+prepares from the spells the member knows. Any other caster prepares from its
+tradition. The slot table of a kindred is not read.
+
 `dw party import` reads a fillable sheet's form fields via pdf.js
 (`src/pdf/fields.ts`) and maps them in `party/import.ts`. Items are resolved
 against the catalog (`party/items.ts`), and the book's weight wins over the
@@ -286,6 +296,9 @@ game content** and should stay that way. Two patterns to follow:
   the schema, seed rows directly, and assert on the query helpers — no file I/O. See
   `test/db.test.ts`.
 - Dice/rules tests use randomized ranges (loop N rolls, assert within bounds).
+- **Web tests** (`test/web-*.test.ts`) run a tab in happy-dom. Register the
+  globals in `beforeAll` and remove them in `afterAll`, import the web module
+  inside the test, and build `PartyRules` by hand. See `test/web-party.test.ts`.
 
 If you add a parser, add a `test/<name>.test.ts` with invented fixtures. If you add a
 DB query, add an in-memory test. Run `bun test` after every change to a parser or the
