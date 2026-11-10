@@ -2,6 +2,7 @@
 
 import { abilityMod } from "../rules.ts";
 import { coinCount, computeAc, computeLoad, describeLoad, type Load } from "./encumbrance.ts";
+import { savesMissing } from "./repair.ts";
 import { classOf, kindredOf, type PartyRules } from "./rules.ts";
 import { runeStatus } from "./runes.ts";
 import { ABILITIES, type Coins, COIN_KINDS, type InvItem, type Party, type PC } from "./model.ts";
@@ -78,7 +79,9 @@ export function showPc(pc: PC, party: Party, rules: PartyRules): string {
   );
   const s = pc.saves;
   out.push(
-    `Saves  Doom ${s.doom}  Ray ${s.ray}  Hold ${s.hold}  Blast ${s.blast}  Spell ${s.spell}` +
+    (savesMissing(pc)
+      ? "Saves  not set (set class=, or doom= ray= hold= blast= spell=)"
+      : `Saves  Doom ${s.doom}  Ray ${s.ray}  Hold ${s.hold}  Blast ${s.blast}  Spell ${s.spell}`) +
       (pc.magicResistance ? `  MR ${signed(pc.magicResistance)}` : ""),
   );
   const skills = Object.entries(pc.skills);

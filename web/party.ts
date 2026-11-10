@@ -64,6 +64,7 @@ import {
   skillBadges,
   traitParagraph,
 } from "./sheet.ts";
+import { repairParty, savesMissing } from "../src/party/repair.ts";
 import { block, button, form, numInput, select, textInput } from "./ui.ts";
 
 export interface PartyView {
@@ -176,6 +177,16 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     if (!storedOk)
       notes.push({
         text: "This browser won't save the party. Export it before you close the page.",
+        kind: "error",
+      });
+    const noSaves = party.members.filter(savesMissing).map((m) => m.name);
+    if (noSaves.length > 0)
+      notes.push({
+        text: `${noSaves.join(", ")} ${noSaves.length > 1 ? "have" : "has"} no Save Targets. ${
+          rules.classes.length > 0
+            ? "Choose the class, or set them, under Edit character."
+            : "Load your Player's Book, or set them under Edit character."
+        }`,
         kind: "error",
       });
     if (rules.catalog.length === 0 && party.members.length > 0)
@@ -337,7 +348,11 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           act(() => {
             party = p;
             selected = party.members.length > 0 ? 0 : -1;
-            return `Imported ${plural(party.members.length, "member")} from ${f.name}.`;
+            return {
+              text: `Imported ${plural(party.members.length, "member")} from ${f.name}.`,
+              kind: "info",
+              details: repairParty(party, rules),
+            };
           });
         },
         (err: Error) => {
@@ -573,11 +588,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       ["AC", `${computeAc(pc, rules.catalog)}`],
       ["Atk", signed(pc.attack)],
       ["Spd", load.speed > 0 ? `${load.speed}` : "0 !"],
-      ["Doom", `${s.doom}`],
-      ["Ray", `${s.ray}`],
-      ["Hold", `${s.hold}`],
-      ["Blast", `${s.blast}`],
-      ["Spell", `${s.spell}`],
+      ...SAVE_KEYS.map((k): [string, string] => [SAVE_LABEL[k], s[k] ? `${s[k]}` : "–"]),
     ];
     if (pc.magicResistance > 0) cells.push(["MR", `+${pc.magicResistance}`]);
     return h(
@@ -1411,6 +1422,22 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           act(() => void (pc.acBonus = v)),
         ),
       ),
+      h(
+        "div",
+        { class: "row row--nums" },
+        ...(["attack", ...SAVE_KEYS] as const).map((k) =>
+          h(
+            "label",
+            { class: "field field--num" },
+            h("span", { class: "label" }, k === "attack" ? "Attack" : SAVE_LABEL[k]),
+            numInput(
+              `${k === "attack" ? pc.attack : pc.saves[k]}`,
+              { "aria-label": k === "attack" ? "Attack" : `${SAVE_LABEL[k]} Save Target` },
+              (v) => act(() => setField(pc, rules, `${k}=${v}`)),
+            ),
+          ),
+        ),
+      ),
       h("label", { class: "check" }, retainer, "Retainer (earns half XP)"),
     );
   }
@@ -1434,6 +1461,12 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   return {
     setRules(r) {
       rules = r;
+      // Members saved with no Save Targets take them from the book's tables.
+      const fixed = repairParty(party, rules);
+      if (fixed.length > 0) {
+        storedOk = storeParty(party);
+        message = { text: "Save Targets were missing.", kind: "info", details: fixed };
+      }
       render();
     },
     add(character) {
@@ -1496,6 +1529,8 @@ const tags = (...parts: (string | null | undefined)[]): string =>
 const list = (title: string, rows: HTMLElement[]): HTMLElement | null =>
   rows.length ? block(title, h("ul", { class: "entries" }, ...rows)) : null;
 
+const SAVE_KEYS = ["doom", "ray", "hold", "blast", "spell"] as const;
+const SAVE_LABEL = { doom: "Doom", ray: "Ray", hold: "Hold", blast: "Blast", spell: "Spell" };
 const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
 /** How much of an entry's text its closed line carries (CSS cuts it to fit). */
 const TAG_LENGTH = 140;

@@ -7,6 +7,7 @@ import { readFormFields } from "../pdf/fields.ts";
 import { firstName, pcFromSheet } from "../party/import.ts";
 import { loadOf, showParty } from "../party/render.ts";
 import { emptyRules, type PartyRules } from "../party/rules.ts";
+import { repairParty } from "../party/repair.ts";
 import { loadRules } from "../party/rules-db.ts";
 import {
   ENC_METHODS,
@@ -54,7 +55,14 @@ export function partyContext(): { party: Party; rules: PartyRules } {
     process.stderr.write(
       "dw: no equipment lists indexed (configure the Player's Book); item weights are unknown\n",
     );
-  return { party: loadParty(), rules };
+  const party = loadParty();
+  // A file with no Save Targets gets them from the class tables, once.
+  const fixed = repairParty(party, rules);
+  if (fixed.length > 0) {
+    saveParty(party);
+    for (const f of fixed) process.stderr.write(`dw: ${f}\n`);
+  }
+  return { party, rules };
 }
 
 function positional(args: string[]): string[] {

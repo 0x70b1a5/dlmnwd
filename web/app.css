@@ -1843,3 +1843,11 @@ ul.chips-list {
     flex: 1 0 auto;
   }
 }
+
+/* Attack and the five Save Targets, in the Edit character fold. */
+.row--nums {
+  align-items: flex-end;
+}
+.row--nums .field--num input {
+  width: 3.3rem;
+}

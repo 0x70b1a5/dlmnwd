@@ -11,6 +11,7 @@ import {
   type KnownRune,
   type PC,
 } from "./model.ts";
+import { fillFromClass } from "./repair.ts";
 import { classOf, kindredOf, type PartyRules } from "./rules.ts";
 
 export type NameList = "glamours" | "knacks" | "spells";
@@ -176,6 +177,8 @@ export function setField(pc: PC, rules: PartyRules, kv: string): void {
       );
       if (!c && rules.classes.length) throw new Error(`Unknown class "${v}".`);
       pc.class = c?.id ?? v.toLowerCase();
+      // A member whose file had no Save Targets takes them from the new class.
+      fillFromClass(pc, rules);
       return;
     }
     case "level": {
@@ -204,6 +207,13 @@ export function setField(pc: PC, rules: PartyRules, kv: string): void {
       return;
     case "attack":
       pc.attack = int();
+      return;
+    case "doom":
+    case "ray":
+    case "hold":
+    case "blast":
+    case "spell":
+      pc.saves[key] = int();
       return;
     case "mr":
     case "magic_resistance":

@@ -5,6 +5,7 @@
 
 import { computeAc } from "./encumbrance.ts";
 import { addItem, makeItem } from "./items.ts";
+import { fillFromClass } from "./repair.ts";
 import type { PartyRules } from "./rules.ts";
 import { lookupRune } from "./runes.ts";
 import { ABILITIES, type Ability, blankPc, type EncMethod, type PC } from "./model.ts";
@@ -201,6 +202,10 @@ export function pcFromSheet(f: Record<string, string>, rules: PartyRules): Impor
     pc.acBonus = 0;
     pc.acBonus = sheetAc - computeAc(pc, catalog);
   }
+
+  // Empty save boxes: take the Save Targets from the class table.
+  const fix = fillFromClass(pc, rules);
+  if (fix) messages.push(fix.text);
 
   const weightOn = /^(?!off$).+/i.test(clean(f["Weight Encumbrance"]));
   const slotOn = /^(?!off$).+/i.test(clean(f["Slot Encumbrance"]));
