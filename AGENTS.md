@@ -225,8 +225,11 @@ reason to exist; never add an upload affordance.
   add to its log, so the field in use keeps the focus. It also gives the dock
   (`TableView.dock`): dice, the turn count and the last result, fixed at the
   bottom of the window on every tab. `main.ts` adds it to the body and sends
-  the Party tab's messages to it (`onNote`). `web/ui.ts` holds the form
+  the Party tab's messages to it (`onNote`). On a narrow screen the dock starts
+  closed, and a round button at the bottom right opens it (`data-open`). `web/ui.ts` holds the form
   helpers it shares with the Party tab.
+- `web/favicon.svg` is the icon, drawn for this project on a 16 by 16 grid.
+  `apple-touch-icon.png` is a 180 pixel render of it.
 - `scripts/build-single.ts` inlines the bundled JS/CSS/fonts into one self-contained
   HTML after `web:build`; it throws if any external asset survives.
 - Deploys to Cloudflare Pages as the static `dist/` build; bundled at dlmnwd.com with an

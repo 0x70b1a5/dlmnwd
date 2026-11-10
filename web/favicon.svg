@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- A dolmen at dusk, with an ember sun between the stones. Drawn for this project. -->
+  <rect width="16" height="16" rx="3" fill="#241d14" shape-rendering="auto"/>
+  <path fill="#6f6147" d="M2 2h1v1H2zM11 1h1v1h-1zM14 3h1v1h-1z"/>
+  <path fill="#cf3a26" d="M7 8h3v1H7zM6 9h5v4H6zM7 13h3v1H7z"/>
+  <path fill="#d7642f" d="M7 9h2v1H7zM6 10h1v1H6z"/>
+  <path fill="#f1e7cf" d="M2 4h6v1H2zM1 5h12v1H1zM2 6h13v1H2zM3 7h3v7H3zM11 8h2v6h-2zM11 7h3v1h-3z"/>
+  <path fill="#c3b48f" d="M5 8h1v6H5zM12 9h1v5h-1zM8 6h7v1H8zM13 7h1v1h-1z"/>
+  <path fill="#5f6b34" d="M1 14h14v1H1z"/>
+</svg>

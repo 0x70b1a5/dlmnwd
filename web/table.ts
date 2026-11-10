@@ -24,6 +24,14 @@ import { type Book, bookRules } from "./book.ts";
 import { castingEntry, h, traitParagraph } from "./sheet.ts";
 import { block, button, form, numInput } from "./ui.ts";
 
+/** A twenty-sided die, and the mark that closes the dock. */
+const DIE_ICON =
+  '<svg class="dock__die" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">' +
+  '<path d="M12 2 21 7v10l-9 5-9-5V7z"/><path d="M12 8.2 17 16.5H7z"/>' +
+  '<path d="M12 2v6.2M3 7l9 1.2L21 7M3 17l4-.5M21 17l-4-.5M12 22l-5-5.5M12 22l5-5.5M3 7l4 9.5M21 7l-4 9.5"/></svg>' +
+  '<svg class="dock__close" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">' +
+  '<path d="M6 9l6 6 6-6"/></svg>';
+
 export interface TableView {
   /** Use the saved book for the lookup (null when it is forgotten). */
   setBook(book: Book | null): void;
@@ -487,9 +495,19 @@ export function mountTable(root: HTMLElement): TableView {
     button("Roll", null, "btn mini", "submit"),
   );
   dockForm.classList.add("dock__expr");
-  const dock = h(
+  // On a narrow screen the dock starts closed, and this round button at the
+  // right thumb opens it (app.css). A wide screen always shows the dock.
+  const toggle = button("", () => setDock(!dock.hasAttribute("data-open")), "dock__toggle");
+  toggle.innerHTML = DIE_ICON;
+  function setDock(open: boolean): void {
+    dock.toggleAttribute("data-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-label", open ? "Hide the dice" : "Show the dice");
+  }
+  const dock: HTMLElement = h(
     "div",
     { class: "dock", role: "region", "aria-label": "Dice and turns" },
+    toggle,
     last,
     h(
       "div",
@@ -505,6 +523,8 @@ export function mountTable(root: HTMLElement): TableView {
       button("+1 turn", () => advanceBy(1), "btn mini", "button", "Advance 1 turn"),
     ),
   );
+
+  setDock(false);
 
   return {
     setBook(b) {

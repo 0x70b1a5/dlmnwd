@@ -31,6 +31,14 @@ html = html.replace(
   },
 );
 
+// Inline the icons as data URIs.
+const ICON_TYPES: Record<string, string> = { svg: "image/svg+xml", png: "image/png" };
+html = html.replace(
+  /(<link\b[^>]*rel="(?:icon|apple-touch-icon)"[^>]*href=")\.?\/?([^"]+\.(svg|png))(")/g,
+  (_m, head: string, file: string, ext: string, tail: string) =>
+    `${head}data:${ICON_TYPES[ext]};base64,${readFileSync(join(dist, file)).toString("base64")}${tail}`,
+);
+
 if (/<link\b[^>]*rel="stylesheet"|<script\b[^>]*\bsrc=/.test(html)) {
   throw new Error("single-file build still links an external script or stylesheet");
 }
