@@ -29,7 +29,7 @@ import { mountParty } from "./party.ts";
 import { partyFromLink } from "./party-link.ts";
 import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
-import { renderEmpty, renderSheet } from "./sheet.ts";
+import { h, renderSheet } from "./sheet.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const fileInput = $<HTMLInputElement>("file");
@@ -81,9 +81,106 @@ fileInput.addEventListener("change", () => {
   if (file) void load(file);
 });
 
+// The same line shows in the rail's book panel and on the welcome page.
+let said: { msg: string; kind: "info" | "error" } = { msg: "", kind: "info" };
 function setStatus(msg: string, kind: "info" | "error" = "info"): void {
+  said = { msg, kind };
   status.textContent = msg;
   status.dataset.kind = kind;
+  const welcome = document.getElementById("welcome-status");
+  if (welcome) {
+    welcome.textContent = msg;
+    welcome.dataset.kind = kind;
+  }
+}
+
+const BUY = "https://necroticgnome.com/products/dolmenwood-players-book";
+let reading = false;
+let partySize = 0;
+
+/** Without a book: say why the page needs it, and give the one way forward. */
+function renderWelcome(): void {
+  const choose = h("button", { type: "button", class: "btn", id: "welcome-pick" }, "Choose PDF");
+  (choose as HTMLButtonElement).disabled = reading;
+  choose.addEventListener("click", () => fileInput.click());
+  const line = h("p", { class: "status", id: "welcome-status", role: "status" }, said.msg);
+  line.dataset.kind = said.kind;
+  const waiting = [
+    partySize > 0 &&
+      `Your party of ${partySize} is kept in this browser. It opens when the book is read.`,
+    location.hash.includes("party=") && "The party in your link opens when the book is read.",
+  ].filter((t): t is string => !!t);
+  sheet.dataset.state = "empty";
+  sheet.classList.remove("reveal");
+  sheet.replaceChildren(
+    h(
+      "div",
+      { class: "empty welcome" },
+      h("p", { class: "say" }, "Start with your Player's Book"),
+      h(
+        "p",
+        { class: "sub" },
+        "This page holds no rules. It reads them from your own PDF of the Dolmenwood Player's Book.",
+      ),
+      h(
+        "ol",
+        { class: "welcome__steps" },
+        h("li", {}, "Choose the PDF. It is read here and never leaves this browser."),
+        h("li", {}, "Generate a character."),
+        h("li", {}, "Add the character to your party and play."),
+      ),
+      choose,
+      line,
+      ...waiting.map((t) => h("p", { class: "sub" }, t)),
+      h(
+        "p",
+        { class: "sub" },
+        "What the page reads is kept in this browser, so you choose the PDF once. No PDF? ",
+        h("a", { href: BUY }, "Buy the book."),
+      ),
+    ),
+  );
+}
+
+/** With a book and no character on the sheet: the next step. */
+function renderReady(): void {
+  const make = h("button", { type: "button", class: "btn" }, "Generate a character");
+  (make as HTMLButtonElement).disabled = reading;
+  make.addEventListener("click", () => generateBtn.click());
+  const open =
+    partySize > 0 ? h("button", { type: "button", class: "btn ghost" }, "Open the party") : null;
+  open?.addEventListener("click", () => showTab("party"));
+  sheet.dataset.state = "empty";
+  sheet.classList.remove("reveal");
+  sheet.replaceChildren(
+    h(
+      "div",
+      { class: "empty welcome" },
+      h("p", { class: "say" }, "The book is ready"),
+      h(
+        "p",
+        { class: "sub" },
+        "Choose a kindred, a class and a name, or let the dice choose. Then generate.",
+      ),
+      h("div", { class: "welcome__go" }, make, open),
+    ),
+  );
+}
+
+/** Show the step that comes next when the sheet holds no character. */
+function renderIdle(): void {
+  if (lastCharacter) return;
+  if (book) renderReady();
+  else renderWelcome();
+}
+
+/** Show only the parts the page can run: most of it needs the book. */
+function setBookState(): void {
+  document.body.dataset.book = book ? "ready" : "none";
+  const partyTab = tabs.party[0];
+  partyTab.disabled = !book;
+  partyTab.title = book ? "" : "The party needs your Player's Book.";
+  if (!book && document.body.dataset.tab === "party") showTab("sheet");
 }
 
 const opt = (value: string, label: string): HTMLOptionElement => {
@@ -142,10 +239,11 @@ async function load(file: File): Promise<void> {
   downloadBtn.hidden = true;
   printBtn.hidden = true;
   addPartyBtn.hidden = true;
-  renderEmpty(sheet);
   lastMarkdown = "";
   lastCharacter = null;
   pick.disabled = true;
+  reading = true;
+  renderIdle();
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const parsed = parseBook(await extractPagesEmulated(bytes), file.name);
@@ -164,6 +262,10 @@ async function load(file: File): Promise<void> {
     setStatus(`Couldn't read that PDF: ${detail}`, "error");
   } finally {
     pick.disabled = false;
+    reading = false;
+    // A failed read leaves the book in use, if there is one, ready as before.
+    setRiteEnabled(!!book);
+    renderIdle();
   }
 }
 
@@ -177,6 +279,10 @@ function useBook(b: Book): void {
   setRiteEnabled(true);
   forgetBtn.hidden = false;
   placeBookPanel(true);
+  setBookState();
+  renderIdle();
+  // A party link opened before the book was read.
+  void partyInAddress();
 }
 
 forgetBtn.addEventListener("click", () => {
@@ -190,6 +296,14 @@ forgetBtn.addEventListener("click", () => {
   party.setRules(emptyRules());
   table.setBook(null);
   placeBookPanel(false);
+  // The sheet on show came from the book, so it goes too.
+  lastCharacter = null;
+  lastMarkdown = "";
+  printBtn.hidden = true;
+  downloadBtn.hidden = true;
+  addPartyBtn.hidden = true;
+  setBookState();
+  renderIdle();
 });
 
 // ── sheet and party tabs ───────────────────────────────────────────────────
@@ -225,6 +339,8 @@ const partyCount = $<HTMLSpanElement>("party-count");
 const party = mountParty($<HTMLElement>("party"), {
   onCount(n) {
     partyCount.textContent = n > 0 ? `(${n})` : "";
+    partySize = n;
+    renderIdle();
   },
   sheet: (pc, members, rules) => memberSheet(pc, members, rules, book),
   spell: (name) => (book ? spellMap(book).get(name.toLowerCase()) : undefined),
@@ -235,6 +351,8 @@ const party = mountParty($<HTMLElement>("party"), {
 // it out of the address, so a reload does not ask again.
 async function partyInAddress(): Promise<void> {
   if (!location.hash.includes("party=")) return;
+  // The party needs the book. The link stays in the address until it is read.
+  if (!book) return renderIdle();
   const hash = location.hash;
   history.replaceState(null, "", location.pathname + location.search);
   showTab("party");
@@ -245,7 +363,6 @@ async function partyInAddress(): Promise<void> {
     table.say("Party", (err as Error).message, "miss");
   }
 }
-void partyInAddress();
 window.addEventListener("hashchange", () => void partyInAddress());
 
 // ── generate & download ────────────────────────────────────────────────────
@@ -330,15 +447,13 @@ downloadBtn.addEventListener("click", () => {
   download(`${safeName(lastName, "character")}.md`, lastMarkdown, "text/markdown");
 });
 
-// Paint the demo character on first load — shows what the tool produces,
-// inviting the user to load their own PDF.
-import { demoCharacter } from "./demo.ts";
-renderSheet(sheet, demoCharacter);
-
 // A book read on an earlier visit: ready without the PDF.
 const saved = loadSavedBook();
 if (saved) {
   useBook(saved);
   const when = new Date(saved.readAt).toLocaleDateString();
   setStatus(`Using ${saved.fileName}, read on ${when} and kept in this browser.`);
+} else {
+  setBookState();
+  renderIdle();
 }

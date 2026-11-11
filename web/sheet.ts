@@ -265,25 +265,6 @@ function personaSection(c: SheetData): HTMLElement | null {
   return section("Persona", dl, 4);
 }
 
-/** The blank canvas shown before a character is generated. */
-export function renderEmpty(sheet: HTMLElement): void {
-  sheet.dataset.state = "empty";
-  sheet.classList.remove("reveal");
-  sheet.replaceChildren(
-    h(
-      "div",
-      { class: "empty" },
-      h("div", { class: "glyph" }, "[ ? ]"),
-      h("p", { class: "say" }, "No character yet"),
-      h(
-        "p",
-        { class: "sub" },
-        "Choose your Player's Book, pick a kindred and class, then Generate.",
-      ),
-    ),
-  );
-}
-
 // One casting entry (spell or glamour), shaped like a trait: bold name, an
 // optional uppercase tag, a Duration/Range stat line, then body prose. Every
 // size here comes from the sheet's existing three type tokens (trait body,

@@ -153,10 +153,12 @@ body {
 
 /* The rail makes characters, so only the Sheet tab shows it. The Party and
    Table tabs get the full width. */
-body:not([data-tab="sheet"]) .rail-cell {
+body:not([data-tab="sheet"]) .rail-cell,
+body[data-book="none"] .rail-cell {
   display: none;
 }
-body:not([data-tab="sheet"]) .shell {
+body:not([data-tab="sheet"]) .shell,
+body[data-book="none"] .shell {
   grid-template-columns: 1fr;
   grid-template-areas: "head" "sheet" "foot";
 }
@@ -469,6 +471,53 @@ select option:disabled {
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
   color: var(--faint);
+}
+
+/* The welcome page (no book) and the next step (book, no character). */
+.welcome {
+  max-width: 46ch;
+  padding: 1.5rem 0.5rem;
+}
+.welcome .say {
+  margin-top: 0;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+.welcome .sub {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+.welcome .sub a {
+  color: var(--ember);
+}
+.welcome__steps {
+  margin: 1rem auto;
+  padding-left: 1.4rem;
+  text-align: left;
+  width: fit-content;
+  max-width: 100%;
+  line-height: 1.5;
+}
+.welcome .btn {
+  font-size: 1rem;
+  padding: 0.7rem 1.4rem;
+}
+.welcome .status {
+  margin: 0.8rem 0 0;
+}
+.welcome .status:empty {
+  display: none;
+}
+.welcome__go {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.tabs [role="tab"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* Sheet header */

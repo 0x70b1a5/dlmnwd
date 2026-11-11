@@ -383,8 +383,6 @@ export function mountTable(root: HTMLElement): TableView {
   function drawLookup(): void {
     const q = query.value.trim().toLowerCase();
     if (!book) {
-      lookupHint.textContent =
-        "Load your Player's Book to look up its spells, glamours, knacks and runes.";
       results.replaceChildren();
       return;
     }
@@ -525,10 +523,13 @@ export function mountTable(root: HTMLElement): TableView {
   );
 
   setDock(false);
+  lookup.hidden = true;
 
   return {
     setBook(b) {
       book = b;
+      // The lookup reads the book, so it shows only with one.
+      lookup.hidden = !b;
       drawLookup();
     },
     dock,

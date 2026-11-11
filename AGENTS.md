@@ -177,6 +177,14 @@ pdf.js parses it in-browser (`extractPagesEmulated`), then the same `parseKindre
 and downloadable Markdown. The PDF never leaves the browser — privacy is the product's
 reason to exist; never add an upload affordance.
 
+Without a book the page shows only what it can run (`body[data-book="none"]`,
+set by `setBookState` in `main.ts`). The Sheet tab says why the PDF is needed
+and gives one "Choose PDF" button (`renderWelcome`). The rail is hidden, the
+Party tab is disabled and the Table tab has no lookup. The dice and the turn
+clock need no book, so they stay. With a book and no character, the sheet
+gives the next step (`renderReady`). A party link opened with no book stays in
+the address until the book is read. Forget book goes back to the first state.
+
 - `web/sheet.ts` is **pure DOM rendering**, shared by `main.ts` and `mock.ts` (the
   prefilled fixture for iterating on the UI without a PDF). Keep sheet.ts free of
   parsing and file I/O.
