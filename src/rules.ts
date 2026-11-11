@@ -127,6 +127,8 @@ export const SLOT_COST = {
   oneHanded: 1,
   missile: 1,
   ammo: 1,
+  /** Loose ammunition that fills one slot, when no list gives a bundle size. */
+  ammoStack: 20,
 };
 
 /** B/X prime-requisite XP adjustments, used when the book's table is unread. */
@@ -136,3 +138,10 @@ export const DEFAULT_PRIME_XP = [
   { min: 13, max: 15, percent: 5 },
   { min: 16, max: 18, percent: 10 },
 ];
+
+/** Starting coins. A character who buys gear in place of the rolled gear gets
+ *  the roll times `buyTimes`. The classic figures, for a book to override. */
+export const STARTING_GOLD = { dice: "3d6", buyTimes: 10 };
+
+/** What each coin is worth in copper pieces. */
+export const COIN_CP = { cp: 1, sp: 10, gp: 100, pp: 500 } as const;

@@ -30,6 +30,7 @@ import { partyFromLink } from "./party-link.ts";
 import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
 import { h, renderSheet } from "./sheet.ts";
+import { mountShop } from "./shop.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const fileInput = $<HTMLInputElement>("file");
@@ -41,6 +42,7 @@ const alignmentSel = $<HTMLSelectElement>("alignment");
 const nameInput = $<HTMLInputElement>("name");
 const playerInput = $<HTMLInputElement>("player");
 const generateBtn = $<HTMLButtonElement>("generate");
+const gearSel = $<HTMLSelectElement>("gear");
 const printBtn = $<HTMLButtonElement>("print");
 const downloadBtn = $<HTMLButtonElement>("download");
 const addPartyBtn = $<HTMLButtonElement>("add-party");
@@ -61,7 +63,15 @@ function placeBookPanel(loaded: boolean): void {
 }
 
 // The rite's fields stay visible but inert until a book is offered.
-const riteFields = [kindredSel, classSel, alignmentSel, nameInput, playerInput, generateBtn];
+const riteFields = [
+  kindredSel,
+  classSel,
+  alignmentSel,
+  nameInput,
+  playerInput,
+  gearSel,
+  generateBtn,
+];
 function setRiteEnabled(on: boolean): void {
   for (const el of riteFields) el.disabled = !on;
 }
@@ -241,6 +251,7 @@ async function load(file: File): Promise<void> {
   addPartyBtn.hidden = true;
   lastMarkdown = "";
   lastCharacter = null;
+  shop.show(null, []);
   pick.disabled = true;
   reading = true;
   renderIdle();
@@ -298,6 +309,7 @@ forgetBtn.addEventListener("click", () => {
   placeBookPanel(false);
   // The sheet on show came from the book, so it goes too.
   lastCharacter = null;
+  shop.show(null, []);
   lastMarkdown = "";
   printBtn.hidden = true;
   downloadBtn.hidden = true;
@@ -365,6 +377,12 @@ async function partyInAddress(): Promise<void> {
 }
 window.addEventListener("hashchange", () => void partyInAddress());
 
+// The shop changes the character on show: draw the sheet and the file again.
+const shop = mountShop($("shop"), (c) => {
+  lastMarkdown = toMarkdown(c);
+  renderSheet(sheet, c);
+});
+
 // ── generate & download ────────────────────────────────────────────────────
 generateBtn.addEventListener("click", () => {
   if (!book) return;
@@ -385,6 +403,7 @@ generateBtn.addEventListener("click", () => {
     player: playerInput.value.trim() || undefined,
     // Random rolls among the alignments the class allows.
     alignment: alignmentSel.value || rollAlignment(klass.id),
+    gear: gearSel.value === "buy" ? "buy" : "roll",
     adventuringItems: book.adventuringItems,
     spellRows: spellMap(book),
     glamoursTable: book.glamoursTable,
@@ -396,6 +415,7 @@ generateBtn.addEventListener("click", () => {
   lastName = character.name;
   lastCharacter = character;
   renderSheet(sheet, character);
+  shop.show(character, bookRules(book).catalog);
   showTab("sheet");
   printBtn.hidden = false;
   downloadBtn.hidden = false;
@@ -406,6 +426,8 @@ generateBtn.addEventListener("click", () => {
 addPartyBtn.addEventListener("click", () => {
   if (!lastCharacter) return;
   party.add(lastCharacter);
+  // The member has the gear now: what is bought later is bought in the party.
+  shop.show(null, []);
   // One character joins once; generate again for another.
   addPartyBtn.disabled = true;
   showTab("party");

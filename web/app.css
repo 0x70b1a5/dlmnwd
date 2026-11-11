@@ -1983,3 +1983,92 @@ ul.chips-list {
 .row--nums .field--num input {
   width: 3.3rem;
 }
+
+/* ── The shop over a generated sheet (buy gear with starting gold) ───────── */
+.shop {
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid var(--line);
+  font-family: var(--ui);
+}
+.shop[hidden] {
+  display: none;
+}
+.shop__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.shop__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.shop__purse {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ember-2);
+}
+.shop .hint {
+  margin: 0.25rem 0 0.5rem;
+}
+.shop__none {
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+}
+.shop__bought {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+.shop__bought li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.15rem 0.1rem 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.shop .btn {
+  padding: 0.15rem 0.6rem;
+  min-height: 2rem;
+  width: auto;
+}
+.shop__list {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+.shop__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.2fr) minmax(0, 2fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 35%, transparent);
+}
+.shop__detail {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+.shop__price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .shop__row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .shop__detail {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media print {
+  .shop {
+    display: none;
+  }
+}

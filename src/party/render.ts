@@ -6,7 +6,15 @@ import { savesMissing } from "./repair.ts";
 import { classOf, kindredOf, type PartyRules } from "./rules.ts";
 import { runeStatus } from "./runes.ts";
 import { slotLine } from "./spells.ts";
-import { ABILITIES, type Coins, COIN_KINDS, type InvItem, type Party, type PC } from "./model.ts";
+import {
+  ABILITIES,
+  type Coins,
+  COIN_KINDS,
+  type InvItem,
+  itemSlots,
+  type Party,
+  type PC,
+} from "./model.ts";
 import { canLevel, nextLevelXp, xpModifier } from "./xp.ts";
 
 export function loadOf(pc: PC, party: Party, rules: PartyRules): Load {
@@ -48,7 +56,7 @@ function itemLine(i: InvItem, method: Party["encumbrance"]): string {
   const note = i.note ? ` (${i.note})` : "";
   const cost =
     method === "slots"
-      ? `${i.qty * i.slots} slot${i.qty * i.slots === 1 ? "" : "s"}`
+      ? `${itemSlots(i)} slot${itemSlots(i) === 1 ? "" : "s"}`
       : `${i.qty * i.weight}`;
   return `  ${pad(`${i.name}${qty}${note}`, 40)} ${cost}`;
 }
@@ -183,7 +191,7 @@ export function pcMarkdown(pc: PC, party: Party, rules: PartyRules): string {
       .filter((i) => i.where === where)
       .map(
         (i) =>
-          `| ${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""} | ${where} | ${i.qty * i.weight} | ${i.qty * i.slots} |`,
+          `| ${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""} | ${where} | ${i.qty * i.weight} | ${itemSlots(i)} |`,
       );
   const runes = pc.runes.map((r) => {
     const st = runeStatus(r, pc, party.day, rules.runes);

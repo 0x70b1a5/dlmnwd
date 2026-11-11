@@ -26,7 +26,9 @@ import {
   rollAlignment,
   rollKindredClass,
 } from "../rules.ts";
+import { buy } from "../gen/shop.ts";
 import { characterToPc } from "../party/from-character.ts";
+import { resolveItem } from "../party/items.ts";
 import { saveParty } from "../party/store.ts";
 import { partyContext } from "./party.ts";
 
@@ -35,11 +37,25 @@ export { characterToPc };
 export function cmdNew(args: string[]): void {
   const character = rollCharacter(args);
   const out = flag(args, "--out");
-  const md = toMarkdown(character);
   const { kindred, klass } = character;
+  const toParty = args.includes("--party");
+  const wanted = (flag(args, "--buy") ?? "").split(",").filter((w) => w.trim());
+  const ctx = toParty || wanted.length ? partyContext() : null;
+  // "--buy=rope, torch x2" buys from the book's price lists, in order.
+  for (const want of wanted) {
+    const { item, qty } = resolveItem(ctx!.rules.catalog, want);
+    try {
+      if (!item) throw new Error(`"${want.trim()}" isn't in the book's equipment lists.`);
+      for (let n = 0; n < qty; n++) buy(character, item, ctx!.rules.catalog);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(1);
+    }
+  }
+  const md = toMarkdown(character);
 
-  if (args.includes("--party")) {
-    const { party, rules } = partyContext();
+  if (ctx && toParty) {
+    const { party, rules } = ctx;
     const pc = characterToPc(character, rules);
     party.members.push(pc);
     saveParty(party);
@@ -56,6 +72,7 @@ export function cmdNew(args: string[]): void {
 /** Roll a level-1 character from `dw new`-style args (kindred, class, flags). */
 export function rollCharacter(args: string[]): Character {
   const positional = args.filter((a) => !a.startsWith("--"));
+  const gear = args.some((a) => a === "--buy" || a.startsWith("--buy=")) ? "buy" : "roll";
   const name = flag(args, "--name");
   const player = flag(args, "--player");
   const alignmentRaw = flag(args, "--alignment");
@@ -73,7 +90,7 @@ export function rollCharacter(args: string[]): Character {
   const chosenClass = isRandom(classId) ? null : findClass(db, classId);
   if ((!isRandom(kindredId) && !chosenKindred) || (!isRandom(classId) && !chosenClass)) {
     console.error(
-      `usage: dw new [kindred] [class] [--name="X"] [--player="Y"] [--out=file.md] [--alignment=Lawful|Neutral|Chaotic]\n` +
+      `usage: dw new [kindred] [class] [--name="X"] [--player="Y"] [--out=file.md] [--alignment=Lawful|Neutral|Chaotic] [--buy[="item, item x2"]]\n` +
         `  omit either, or pass "random", to roll it\n` +
         `  kindreds: ${allKindredIds(db).join(", ")}\n` +
         `  classes:  ${allClassIds(db).join(", ")}`,
@@ -126,6 +143,7 @@ export function rollCharacter(args: string[]): Character {
     player,
     // Left out, the alignment is rolled like the kindred and class.
     alignment: alignment ?? rollAlignment(klass.id),
+    gear,
     adventuringItems,
     spellRows,
     glamoursTable,

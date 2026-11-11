@@ -1683,7 +1683,10 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       const fixed = repairParty(party, rules);
       if (fixed.length > 0) {
         storedOk = storeParty(party);
-        message = { text: "Save Targets were missing.", kind: "info", details: fixed };
+        const text = fixed.some((f) => f.includes("Save Targets"))
+          ? "Save Targets were missing."
+          : "Gear slots are counted again.";
+        message = { text, kind: "info", details: fixed };
       }
       render();
     },

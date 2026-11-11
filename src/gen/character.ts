@@ -4,7 +4,7 @@ import type { GlamourEntry } from "../parse/glamour.ts";
 import type { KnackEntry } from "../parse/knack.ts";
 import type { KindredPhysical, ParsedKindred } from "../parse/kindred.ts";
 import { parseStatBlock, structureTrait, type Trait } from "../parse/traits.ts";
-import { abilityMod } from "../rules.ts";
+import { abilityMod, COIN_CP, STARTING_GOLD } from "../rules.ts";
 import { pick } from "../util.ts";
 
 const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
@@ -22,7 +22,7 @@ const ABILITY_LABEL: Record<Ability, string> = {
 // Ascending AC by armour. Mechanics, not flavour.
 const ARMOUR_AC: Record<string, number> = { none: 10, leather: 12, chainmail: 14, plate: 16 };
 
-interface Loadout {
+export interface Loadout {
   armour: string; // display name
   ac: number; // total AC: armour + shield + Dex + kindred bonus
   baseAc: number; // AC from the worn equipment alone (armour + shield)
@@ -68,12 +68,32 @@ function rollOption(options: EquipmentOption[]): string {
   return options[options.length - 1].item;
 }
 
+/** The size class a kindred's height line gives in parentheses, if any. */
+export function kindredSize(kindred: ParsedKindred): string | null {
+  return kindred.physical?.height?.match(/\(([^)]+)\)/)?.[1].trim() ?? null;
+}
+
+/**
+ * A table entry can name another item for one size of character:
+ * "Pike + 20 bolts (dirk + 20 bolts for Short characters)". Give the one that
+ * fits the size.
+ */
+export function sizedOption(item: string, size: string | null): string {
+  const m = item.match(/^(.*?)\s*\((.+?)\s+for\s+(\w+)\s+characters\)\s*$/i);
+  if (!m) return item;
+  const [, usual, other, forSize] = m;
+  const fits = !!size && size.toLowerCase() === forSize.toLowerCase();
+  // The other item starts a sentence of its own now.
+  return fits ? other.charAt(0).toUpperCase() + other.slice(1) : usual;
+}
+
 /** Roll the class's starting equipment. Falls back to the default loadout
  *  (heaviest armour + shield) when the PDF parse didn't produce a table. */
 function rollEquipment(
   klass: ParsedClass,
   furArmourBonus: number,
   dexMod: number,
+  size: string | null,
 ): { loadout: Loadout; weapons: string[]; classItems: string[] } {
   const se = klass.startingEquipment;
   if (!se) {
@@ -85,9 +105,9 @@ function rollEquipment(
   }
 
   const armourRoll = rollOption(se.armour);
-  const weapon1 = rollOption(se.weapons);
+  const weapon1 = sizedOption(rollOption(se.weapons), size);
   // Roll a second weapon (the table says "roll 1d6 twice"); deduplicate.
-  let weapon2 = rollOption(se.weapons);
+  let weapon2 = sizedOption(rollOption(se.weapons), size);
   if (weapon2 === weapon1) weapon2 = "";
 
   const weapons = [weapon1, weapon2].filter(Boolean);
@@ -298,6 +318,15 @@ function buildMagic(
 // General starting items every character receives (step 8). These are standard
 // dungeon-crawl gear, not setting-specific creative content.
 const GENERAL_ITEMS = ["Common clothes", "Backpack with rations, waterskin, and tinder box"];
+// A character who buys gear starts with clothes and coins only.
+const BUYER_ITEMS = ["Common clothes"];
+
+/** One purchase: units of a listed item, and the copper paid for them. */
+export interface Bought {
+  name: string;
+  qty: number;
+  cp: number;
+}
 
 export interface SpellDetail {
   name: string;
@@ -336,7 +365,11 @@ export interface Character {
   persona: Record<string, string>;
   alignment: string;
   background: string | null;
+  /** Starting coins in gp, before anything is bought. */
   gold: number;
+  /** Set when the gear is bought, not rolled: what was bought so far. The
+   *  armour, weapon and item lines then show these (gen/shop.ts). */
+  bought?: Bought[];
   generalItems: string[];
   adventuringItems: string[];
   trinket: string | null;
@@ -465,6 +498,8 @@ export function generate(
     name?: string;
     player?: string;
     alignment?: string;
+    /** "buy" gives more coins and no rolled gear. The trinket is still rolled. */
+    gear?: "roll" | "buy";
     adventuringItems?: string[];
     spellRows?: ReadonlyMap<string, SpellDetail>;
     glamoursTable?: string[];
@@ -480,11 +515,12 @@ export function generate(
   const { scores, adjusted: scoresAdjusted } = adjustAbilityScores(raw, klass.primeAbilities);
 
   const hp = Math.max(1, roll(klass.hitDie).total + abilityMod(scores.con));
-  const { loadout, weapons, classItems } = rollEquipment(
-    klass,
-    kindred.furArmourBonus ?? 0,
-    abilityMod(scores.dex),
-  );
+  const buying = opts.gear === "buy";
+  const fur = kindred.furArmourBonus ?? 0;
+  const dexMod = abilityMod(scores.dex);
+  const { loadout, weapons, classItems } = buying
+    ? { loadout: parseRolledArmour("", fur, dexMod), weapons: [], classItems: [] }
+    : rollEquipment(klass, fur, dexMod, kindredSize(kindred));
   // Apply any kindred armour-name swaps (e.g. small folk replace metal armour
   // with a fitted equivalent; the AC is unchanged).
   for (const [metal, swap] of Object.entries(kindred.armourSwaps ?? {})) {
@@ -495,8 +531,8 @@ export function generate(
     Object.entries(kindred.persona).map(([field, opts2]) => [field, pick(opts2)]),
   );
 
-  const gold = roll("3d6").total;
-  const adventuringItems = rollAdventuringItems(opts.adventuringItems ?? []);
+  const gold = roll(STARTING_GOLD.dice).total * (buying ? STARTING_GOLD.buyTimes : 1);
+  const adventuringItems = buying ? [] : rollAdventuringItems(opts.adventuringItems ?? []);
   const trinket = kindred.trinkets.length > 0 ? pick(kindred.trinkets) : null;
   const background = kindred.backgrounds.length > 0 ? pick(kindred.backgrounds) : null;
   const alignment = opts.alignment ?? "Neutral";
@@ -532,7 +568,8 @@ export function generate(
     alignment,
     background,
     gold,
-    generalItems: GENERAL_ITEMS,
+    ...(buying ? { bought: [] } : {}),
+    generalItems: buying ? BUYER_ITEMS : GENERAL_ITEMS,
     adventuringItems,
     trinket,
     weapons,
@@ -621,6 +658,24 @@ function traitList(traits: Trait[]): string {
     .join("\n");
 }
 
+/** The coins a character has left, in copper: the start less what was bought. */
+export function purseCp(c: Pick<Character, "gold" | "bought">): number {
+  return c.gold * COIN_CP.gp - (c.bought ?? []).reduce((n, b) => n + b.cp, 0);
+}
+
+/** Copper as the fewest gold, silver and copper coins: "12 gp 5 sp". */
+export function coinsText(cp: number): string {
+  const gp = Math.floor(cp / COIN_CP.gp);
+  const sp = Math.floor((cp % COIN_CP.gp) / COIN_CP.sp);
+  const rest = cp % COIN_CP.sp;
+  const parts = [gp ? `${gp} gp` : "", sp ? `${sp} sp` : "", rest ? `${rest} cp` : ""];
+  return parts.filter(Boolean).join(" ") || "0 gp";
+}
+
+export function coinsLeft(c: Pick<Character, "gold" | "bought">): string {
+  return coinsText(purseCp(c));
+}
+
 /** Render a vault-format PC markdown sheet. The default gear loadout is marked
  *  for the player to swap for their rolled starting equipment. */
 export function toMarkdown(c: Character): string {
@@ -640,7 +695,7 @@ export function toMarkdown(c: Character): string {
     ...c.adventuringItems.map((g) => `| ${g} | |`),
     ...(c.trinket ? [`| Trinket: ${c.trinket} | |`] : []),
     ...(c.spellBook ? [`| Spell book: ${c.spellBook.name} | |`] : []),
-    `| ${c.gold} gp | |`,
+    `| ${coinsLeft(c)} | |`,
   ].join("\n");
 
   return `---

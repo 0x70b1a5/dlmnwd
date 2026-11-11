@@ -243,6 +243,8 @@ initiative is rerolled every round. Nothing is tracked; it rolls and prints.
 dw new <kindred> <class> --name="Pip Quickfoot" --player=Sam --out=PCs/Pip.md
 dw new                 # roll both
 dw new random cleric   # roll a kindred that may be a cleric
+dw new --buy           # starting gold in place of rolled gear (the trinket is still rolled)
+dw new --buy="rope, torch x2" --party   # and buy from the book's price lists
 ```
 
 Omit a kindred or class (or pass `random`) and it is rolled for you, only ever

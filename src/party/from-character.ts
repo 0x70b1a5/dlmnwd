@@ -1,6 +1,7 @@
 // A freshly rolled character (gen/character.ts) as a party member. Pure.
 
-import { type Character, resolvedKindredTraits } from "../gen/character.ts";
+import { type Character, purseCp, resolvedKindredTraits } from "../gen/character.ts";
+import { COIN_CP } from "../rules.ts";
 import { pick } from "../util.ts";
 import { computeAc } from "./encumbrance.ts";
 import { addItem, makeItem } from "./items.ts";
@@ -37,16 +38,25 @@ export function characterToPc(c: Character, rules: PartyRules): PC {
   const kindredTraits = resolvedKindredTraits(c);
   const rolled = kindredTraits.find((t, i) => t !== c.kindred.traits[i]);
   if (rolled && c.symbioticFlesh) pc.notes.push(`${rolled.name} at level 1: ${c.symbioticFlesh}`);
-  pc.coins.gp = c.gold;
+  const cp = purseCp(c);
+  pc.coins.gp = Math.floor(cp / COIN_CP.gp);
+  pc.coins.sp = Math.floor((cp % COIN_CP.gp) / COIN_CP.sp);
+  pc.coins.cp = cp % COIN_CP.sp;
   const { catalog, enc } = rules;
   const add = (text: string) => {
     if (text.trim()) addItem(pc, makeItem(catalog, enc, text).inv);
   };
-  // "Leather armour + shield" → the armour and the shield.
-  for (const part of c.loadout.armour.split(/\s*\+\s*/))
-    if (!/^no armour$/i.test(part) && !/^none$/i.test(part)) add(part);
-  for (const w of c.weapons) for (const part of w.split(/\s*\+\s*/)) add(part);
-  for (const g of [...c.classItems, ...c.generalItems, ...c.adventuringItems]) {
+  if (c.bought) {
+    // Bought gear names the book's own entries: no text to take apart.
+    for (const b of c.bought) addItem(pc, makeItem(catalog, enc, b.name, { qty: b.qty }).inv);
+  } else {
+    // "Leather armour + shield" → the armour and the shield.
+    for (const part of c.loadout.armour.split(/\s*\+\s*/))
+      if (!/^no armour$/i.test(part) && !/^none$/i.test(part)) add(part);
+    for (const w of c.weapons) for (const part of w.split(/\s*\+\s*/)) add(part);
+  }
+  const rolledItems = c.bought ? [] : c.adventuringItems;
+  for (const g of [...c.classItems, ...c.generalItems, ...rolledItems]) {
     // "Backpack with rations, waterskin, and tinder box" is several things.
     for (const part of g.split(/\s*(?:,|\bwith\b|\band\b)\s*/)) add(part);
   }

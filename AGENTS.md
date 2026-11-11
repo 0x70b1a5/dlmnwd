@@ -289,6 +289,20 @@ Obsidian-vault-format front-matter sheet. Both sheets give each kindred and clas
 trait with its name and text, as parsed from the book. The loadout is a default to
 swap for rolled starting gear.
 
+`generate` takes `gear: "roll" | "buy"`. A buyer gets `STARTING_GOLD` times
+`buyTimes` (`src/rules.ts`), plain clothes and an empty `bought` list. The
+trinket, background and persona are rolled in both cases. `src/gen/shop.ts`
+(pure) reads the catalogue's cost cells (`priceOf`), and `buy` and `giveBack`
+change `bought` and the sheet's armour, weapon and item lines. `purseCp` gives
+the coins left. `characterToPc` adds bought gear by its catalogue name.
+`web/shop.ts` is the shop above the generated sheet, and `dw new --buy` is the
+CLI's form. The shop closes when the character joins the party.
+
+An inventory entry can share its slots between units (`InvItem.per`, read by
+`itemSlots`): loose ammunition packs like the bundles the same list sells
+(`slotStack`). A table entry that names another item for one size of character
+gives that item to a kindred of that size (`sizedOption`).
+
 ## Code conventions
 
 - **`verbatimModuleSyntax: true`** — type-only imports **must** be `import type {…}`.

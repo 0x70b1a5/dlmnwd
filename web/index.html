@@ -118,6 +118,13 @@
               <span><span class="step">IV</span> Generate</span>
             </div>
             <div class="panel__body">
+              <label class="field">
+                <span class="label">Gear</span>
+                <select id="gear" disabled>
+                  <option value="roll" selected>Roll for gear</option>
+                  <option value="buy">Buy with starting gold</option>
+                </select>
+              </label>
               <button id="generate" type="button" class="btn block" disabled>Generate</button>
               <button id="add-party" type="button" class="btn ghost block" hidden>
                 Add to party
@@ -163,6 +170,7 @@
           </button>
         </div>
         <div id="sheet-frame" class="frame" role="tabpanel" aria-labelledby="tab-sheet">
+          <section id="shop" class="shop" aria-label="Buy gear" hidden></section>
           <article id="sheet" class="sheet" data-state="empty" aria-live="polite"></article>
         </div>
         <div id="party-frame" class="frame" role="tabpanel" aria-labelledby="tab-party" hidden>

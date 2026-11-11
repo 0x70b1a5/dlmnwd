@@ -4,8 +4,10 @@
 import {
   APPEARANCE_FIELDS,
   type Character,
+  coinsLeft,
   PERSONA_ORDER,
   type Physique,
+  purseCp,
   resolvedKindredTraits,
 } from "../src/gen/character.ts";
 import { parseStatBlock, structureTrait } from "../src/parse/traits.ts";
@@ -208,7 +210,7 @@ function characterGear(c: Character): [string, string][] {
   rows.push(["Armour", `${c.loadout.armour} (AC ${c.loadout.baseAc})`]);
   for (const w of c.weapons) rows.push(["Weapon", w]);
   for (const item of c.classItems) rows.push(["Class item", item]);
-  rows.push(["Gold", `${c.gold} gp`]);
+  rows.push(["Coins", coinsLeft(c)]);
   // General starting gear, then adventuring items.
   for (const g of c.generalItems) rows.push(["Gear", g]);
   for (const g of c.adventuringItems) rows.push(["Item", g]);
@@ -405,7 +407,7 @@ export function characterSheet(c: Character): SheetData {
       ["Armour Class", String(c.loadout.ac)],
       ["Attack", signed(c.klass.attack)],
       ["Speed", String(c.speed)],
-      ["Gold", String(c.gold)],
+      ["Gold", String(Math.floor(purseCp(c) / 100))],
       ["XP to L2", c.klass.nextLevelXp.toLocaleString()],
     ],
     scores: c.scores,

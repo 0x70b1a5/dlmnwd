@@ -2,6 +2,8 @@
 // file written by hand, or a sheet with empty save boxes, gives Save Targets of
 // 0, which no table has. Pure: no Node APIs.
 
+import { SLOT_COST } from "../rules.ts";
+import { slotStack } from "./items.ts";
 import type { Party, PC, Saves } from "./model.ts";
 import { classOf, type PartyRules } from "./rules.ts";
 import { currentRow } from "./xp.ts";
@@ -42,10 +44,28 @@ export function fillFromClass(pc: PC, rules: PartyRules): Repair | null {
   };
 }
 
-/** fillFromClass for each member. Returns a statement for each member it set. */
+/**
+ * Loose ammunition saved before stacks were counted took one slot for each
+ * piece. Give each such entry its stack size. Returns a statement for each.
+ */
+export function stackAmmo(pc: PC, rules: PartyRules): string[] {
+  const out: string[] = [];
+  for (const i of pc.items) {
+    if (i.per || i.slots !== SLOT_COST.ammo) continue;
+    const per = slotStack(rules.catalog.find((c) => c.name === i.ref) ?? null, rules.catalog);
+    if (per <= 1) continue;
+    i.per = per;
+    out.push(`${i.name} now fill one slot for each ${per}`);
+  }
+  return out;
+}
+
+/** The repairs for each member. Returns a statement for each change. */
 export function repairParty(party: Party, rules: PartyRules): string[] {
   return party.members.flatMap((pc) => {
     const fix = fillFromClass(pc, rules);
-    return fix?.filled ? [`${pc.name}: ${fix.text}.`] : [];
+    return [...(fix?.filled ? [fix.text] : []), ...stackAmmo(pc, rules)].map(
+      (text) => `${pc.name}: ${text}.`,
+    );
   });
 }

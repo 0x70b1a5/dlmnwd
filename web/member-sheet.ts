@@ -3,7 +3,7 @@
 // spells, glamours and knacks come from the saved book when there is one.
 
 import { coinCount, computeAc, describeLoad } from "../src/party/encumbrance.ts";
-import type { InvItem, Party, PC } from "../src/party/model.ts";
+import { type InvItem, itemSlots, type Party, type PC } from "../src/party/model.ts";
 import { formatCoins, loadOf } from "../src/party/render.ts";
 import { classOf, kindredOf, type PartyRules } from "../src/party/rules.ts";
 import { runeStatus } from "../src/party/runes.ts";
@@ -17,7 +17,7 @@ function itemRow(i: InvItem, method: Party["encumbrance"]): [string, string] {
   const name = `${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""}`;
   const stowed = i.where === "stowed" ? "stowed" : "";
   if (method === "basic") return [name, stowed || "equipped"];
-  const n = method === "slots" ? i.qty * i.slots : i.qty * i.weight;
+  const n = method === "slots" ? itemSlots(i) : i.qty * i.weight;
   return [name, [String(n), stowed].filter((x) => x).join(", ")];
 }
 

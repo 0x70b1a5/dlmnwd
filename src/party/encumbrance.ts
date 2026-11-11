@@ -3,7 +3,7 @@
 
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import { abilityMod } from "../rules.ts";
-import type { Coins, EncMethod, PC } from "./model.ts";
+import { type Coins, type EncMethod, itemSlots, type PC } from "./model.ts";
 
 export interface Load {
   method: EncMethod;
@@ -47,11 +47,10 @@ export function computeLoad(
   const problems: string[] = [];
   const equippedSlots = pc.items
     .filter((i) => i.where === "equipped")
-    .reduce((s, i) => s + i.qty * i.slots, 0);
+    .reduce((s, i) => s + itemSlots(i), 0);
   const coinSlots = enc.coinsPerSlot > 0 ? Math.ceil(coins / enc.coinsPerSlot) : 0;
   const stowedSlots =
-    pc.items.filter((i) => i.where === "stowed").reduce((s, i) => s + i.qty * i.slots, 0) +
-    coinSlots;
+    pc.items.filter((i) => i.where === "stowed").reduce((s, i) => s + itemSlots(i), 0) + coinSlots;
   const holders = pc.items
     .filter((i) =>
       enc.stowContainers.some((w) => new RegExp(`^${w}s?\\b`, "i").test(i.ref ?? i.name)),

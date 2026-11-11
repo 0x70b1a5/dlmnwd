@@ -111,6 +111,10 @@ function matchCatalog(
   if (!q) return null;
   const exact = catalog.find((c) => norm(c.name) === q);
   if (exact) return { item: exact };
+  // One word in the query, two in the list ("handaxe", "hand axe").
+  const tight = (t: string): string => norm(t).replace(/[\s-]+/g, "");
+  const joined = catalog.find((c) => tight(c.name) === tight(q));
+  if (joined) return { item: joined };
   const qw = words(q);
   if (qw.length === 0) return null;
 
@@ -170,6 +174,16 @@ export function slotCost(item: CatalogItem | null, name: string, enc: Encumbranc
   }
 }
 
+/**
+ * How many units of an item share its slots. Ammunition sold by the piece
+ * packs like the bundles the same list sells ("quiver of 20"). Other items: 1.
+ */
+export function slotStack(item: CatalogItem | null, catalog: CatalogItem[]): number {
+  if (!item || item.kind !== "ammo" || bundleSize(item) > 1) return 1;
+  const sizes = catalog.filter((c) => c.kind === "ammo").map(bundleSize);
+  return Math.max(...sizes, 0) || SLOT_COST.ammoStack;
+}
+
 /** Weapons, armour and shields are carried ready; everything else is packed. */
 export function defaultWhere(item: CatalogItem | null): Where {
   return item && (item.kind === "weapon" || item.kind === "armour") ? "equipped" : "stowed";
@@ -202,6 +216,8 @@ export function makeItem(
     where: opts.where ?? defaultWhere(item),
   };
   if (item) inv.ref = item.name;
+  const per = opts.slots === undefined ? slotStack(item, catalog) : 1;
+  if (per > 1) inv.per = per;
   if (resolved.note) inv.note = resolved.note;
   if (opts.treasure ?? item?.kind === "treasure") inv.treasure = true;
   if (exampleMatches(enc.bulky, item?.name ?? query)) {

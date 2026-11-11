@@ -43,6 +43,8 @@ From your PDF (indexed into a local SQLite db; see README)
   spell <name>         Spell entry from the Player's Book
   list <category>      Print names: monsters|spells|hexes|kindreds|classes
   new [kindred] [class]  Roll a level-1 PC, emit a vault markdown sheet
+                         --buy gives starting gold in place of rolled gear;
+                         --buy="item, item x2" buys from the book's lists
                          (omit either, or pass "random", to roll it)
                          (--name=, --player=, --alignment=, --out=file.md,
                          --party to add them to the party)

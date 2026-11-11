@@ -17,12 +17,19 @@ export interface InvItem {
   weight: number;
   /** Gear slots one unit occupies (slot encumbrance). */
   slots: number;
+  /** Units that share those slots (20 loose sling stones fill one). Default 1. */
+  per?: number;
   where: Where;
   /** Counts as treasure (basic encumbrance), e.g. a gem or a potion. */
   treasure?: boolean;
   /** Bulky (two hands to carry): can't be stowed in a container. */
   bulky?: boolean;
   note?: string;
+}
+
+/** Gear slots an inventory entry fills. */
+export function itemSlots(i: InvItem): number {
+  return Math.ceil(i.qty / Math.max(1, i.per ?? 1)) * i.slots;
 }
 
 export interface Coins {
