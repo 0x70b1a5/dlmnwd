@@ -298,7 +298,9 @@ the coins left. `characterToPc` adds bought gear by its catalogue name.
 `web/shop.ts` is the shop above the generated sheet, and `dw new --buy` is the
 CLI's form. The shop closes when the character joins the party.
 
-An inventory entry can share its slots between units (`InvItem.per`, read by
+An item is equipped, stowed or stashed (`Where`). Stashed gear is left behind:
+it stays on the list and counts for no weight, slots, AC or container room
+(`carriedItems`). An inventory entry can share its slots between units (`InvItem.per`, read by
 `itemSlots`): loose ammunition packs like the bundles the same list sells
 (`slotStack`). A table entry that names another item for one size of character
 gives that item to a kindred of that size (`sizedOption`).

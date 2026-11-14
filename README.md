@@ -169,9 +169,10 @@ dw party                           # level, XP, HP, AC, load, and Speed for ever
 
 dw pc pip                       # one character (any unambiguous part of the name)
 dw pc pip item add rope         # looked up in the book's equipment lists
-dw pc pip item add torches 2    # -e/--equipped, -s/--stowed, --weight=N, --slots=N
+dw pc pip item add torches 2    # -e/--equipped, -s/--stowed, --stashed, --weight=N, --slots=N
 dw pc pip item rm rations 1
 dw pc pip stow longbow          # / equip
+dw pc pip stash tent            # left at camp: listed, but no weight or slots
 dw pc pip coins +120gp -5sp
 dw pc pip bank 1700gp           # banked coins don't weigh anything (withdraw: back)
 dw pc pip hp -3                 # +N, =N, max

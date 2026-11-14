@@ -19,8 +19,11 @@ type Handler = (e: Event) => void;
 
 const handlers = new WeakMap<EventTarget, Map<string, Handler>>();
 
-function dispatch(this: EventTarget, e: Event): void {
-  handlers.get(this)?.get(e.type)?.(e);
+function dispatch(e: Event): void {
+  // The element the listener is on. Not `this`: the test DOM gives a select's
+  // listeners another one.
+  const el = e.currentTarget;
+  if (el) handlers.get(el)?.get(e.type)?.(e);
 }
 
 /**

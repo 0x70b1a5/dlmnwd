@@ -54,7 +54,7 @@ Party (saved locally; see dw party path)
                          import <sheet.pdf…> | new | rm | xp <n> [names…]
                          | enc weight|slots|basic | rest [days]   (dw party help)
   pc <name> [cmd]      One character: gear, coins, HP, XP, level-up, magic
-                         item add|rm|set, equip, stow, coins, bank, hp, xp,
+                         item add|rm|set, equip, stow, stash, coins, bank, hp, xp,
                          levelup, glamour, rune add|rm|use|learn, spell,
                          prepare, cast, set, sheet
                          (dw pc help)

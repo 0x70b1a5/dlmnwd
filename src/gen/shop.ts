@@ -41,11 +41,17 @@ export function priceText(p: Price): string {
   return p.units > 1 ? `${text} for ${p.units}` : text;
 }
 
+/** The AC an armour entry gives, or its shield bonus. */
+const value = (i: CatalogItem): number => parseInt((i.ac ?? "").replace("+", ""), 10) || 0;
+
+/** "Rushlight ×4" for a sheet line. */
+const line = (b: { name: string; qty: number }): string =>
+  b.qty > 1 ? `${b.name} ×${b.qty}` : b.name;
+
 /** Armour Class with the bought armour: the best body armour, plus shields. */
 function boughtLoadout(c: Character, armour: CatalogItem[]): Loadout {
   let body: CatalogItem | null = null;
   let shield: CatalogItem | null = null;
-  const value = (i: CatalogItem): number => parseInt((i.ac ?? "").replace("+", ""), 10) || 0;
   for (const a of armour) {
     if ((a.ac ?? "").startsWith("+")) {
       if (!shield || value(a) > value(shield)) shield = a;
@@ -68,7 +74,6 @@ function boughtLoadout(c: Character, armour: CatalogItem[]): Loadout {
 function showBought(c: Character, catalog: CatalogItem[]): void {
   const bought = c.bought ?? [];
   const entry = (name: string) => catalog.find((x) => x.name === name);
-  const line = (b: { name: string; qty: number }) => (b.qty > 1 ? `${b.name} ×${b.qty}` : b.name);
   const kind = (name: string) => entry(name)?.kind;
   const armour = bought.map((b) => entry(b.name)).filter((i) => i?.kind === "armour");
   c.loadout = boughtLoadout(c, armour as CatalogItem[]);

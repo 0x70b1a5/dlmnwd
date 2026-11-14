@@ -14,6 +14,8 @@ import {
   itemSlots,
   type Party,
   type PC,
+  type Where,
+  WHERES,
 } from "./model.ts";
 import { canLevel, nextLevelXp, xpModifier } from "./xp.ts";
 
@@ -100,10 +102,12 @@ export function showPc(pc: PC, party: Party, rules: PartyRules): string {
   out.push("");
   out.push(`Load (${party.encumbrance}): ${describeLoad(load)}`);
   for (const p of load.problems) out.push(`  ⚠ ${p}`);
-  for (const where of ["equipped", "stowed"] as const) {
+  for (const where of WHERES) {
     const items = pc.items.filter((i) => i.where === where);
     if (items.length === 0) continue;
-    out.push(`${where === "equipped" ? "Equipped" : "Stowed"}`);
+    out.push(
+      `${where.charAt(0).toUpperCase()}${where.slice(1)}${where === "stashed" ? " (not carried)" : ""}`,
+    );
     for (const i of items) out.push(itemLine(i, party.encumbrance));
   }
   const coins = coinCount(pc.coins);
@@ -186,7 +190,7 @@ export function pcMarkdown(pc: PC, party: Party, rules: PartyRules): string {
   const load = loadOf(pc, party, rules);
   const next = nextLevelXp(pc, klass);
   const s = pc.saves;
-  const items = (where: "equipped" | "stowed") =>
+  const items = (where: Where) =>
     pc.items
       .filter((i) => i.where === where)
       .map(
@@ -250,7 +254,7 @@ ${Object.entries(pc.skills)
 
 | Item | Carried | Weight | Slots |
 |---|---|---|---|
-${[...items("equipped"), ...items("stowed")].join("\n")}
+${WHERES.flatMap(items).join("\n")}
 
 **Coins:** ${formatCoins(pc.coins)}${coinCount(pc.banked) ? `  \n**Banked:** ${formatCoins(pc.banked)}` : ""}
 ${pc.glamours.length ? `\n## Glamours\n\n${pc.glamours.map((g) => `- ${g}`).join("\n")}\n` : ""}${runes.length ? `\n## Runes\n\n${runes.join("\n")}\n` : ""}${pc.knacks.length ? `\n## Knacks\n\n${pc.knacks.map((k) => `- ${k}`).join("\n")}\n` : ""}${pc.spells.length ? `\n## Spells\n\n${pc.spells.map((k) => `- ${k}`).join("\n")}\n` : ""}${pc.notes.length ? `\n## Notes\n\n${pc.notes.map((n) => `- ${n}`).join("\n")}\n` : ""}`;

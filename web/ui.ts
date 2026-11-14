@@ -75,6 +75,8 @@ export function select(
       h("option", v === value ? { value: v, selected: "" } : { value: v }, label),
     ),
   ) as HTMLSelectElement;
+  // The test DOM does not always read the selected attribute: set the value too.
+  el.value = value;
   if (onChange) on(el, "change", () => afterFocusMoves(() => onChange(el.value)));
   return el;
 }

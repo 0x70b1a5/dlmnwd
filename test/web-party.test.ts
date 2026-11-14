@@ -162,3 +162,23 @@ test("undo puts the party back as it was before the last change", async () => {
     .click();
   expect(stored().prepared).toEqual([]);
 });
+
+test("an item moved to the stash leaves the load, and comes back", async () => {
+  await mount({
+    name: "Orla Venn",
+    class: "warden",
+    level: 2,
+    saves: saves(11),
+    items: [{ name: "Tent", qty: 1, weight: 200, slots: 1, where: "stowed" }],
+  });
+  const place = () => byLabel("Where Tent is") as HTMLSelectElement;
+  expect(place().value).toBe("stowed");
+  expect(root.querySelector(".load-line")!.textContent).toContain("200");
+  place().value = "stashed";
+  place().dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+  expect(stored().items[0].where).toBe("stashed");
+  expect(place().value).toBe("stashed");
+  expect(root.querySelector(".load-line")!.textContent).not.toContain("200");
+  expect(notes.at(-1)).toBe("Orla Venn: Tent → stashed");
+});

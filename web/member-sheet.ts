@@ -15,8 +15,10 @@ const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 
 function itemRow(i: InvItem, method: Party["encumbrance"]): [string, string] {
   const name = `${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""}`;
-  const stowed = i.where === "stowed" ? "stowed" : "";
+  const stowed = i.where === "equipped" ? "" : i.where;
   if (method === "basic") return [name, stowed || "equipped"];
+  // Stashed gear is not carried, so it counts for nothing.
+  if (i.where === "stashed") return [name, "stashed"];
   const n = method === "slots" ? itemSlots(i) : i.qty * i.weight;
   return [name, [String(n), stowed].filter((x) => x).join(", ")];
 }
@@ -39,6 +41,7 @@ export function memberSheet(pc: PC, party: Party, rules: PartyRules, book: Book 
   const gear: [string, string][] = [
     ...pc.items.filter((i) => i.where === "equipped").map((i) => itemRow(i, party.encumbrance)),
     ...pc.items.filter((i) => i.where === "stowed").map((i) => itemRow(i, party.encumbrance)),
+    ...pc.items.filter((i) => i.where === "stashed").map((i) => itemRow(i, party.encumbrance)),
     ["Coins", formatCoins(pc.coins)],
   ];
   if (coinCount(pc.banked) > 0) gear.push(["Banked", formatCoins(pc.banked)]);

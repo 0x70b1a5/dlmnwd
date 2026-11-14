@@ -5,7 +5,10 @@
 export const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
 export type Ability = (typeof ABILITIES)[number];
 
-export type Where = "equipped" | "stowed";
+/** Equipped and stowed gear is carried. Stashed gear is left somewhere safe
+ *  (an inn, a camp, a cart): it stays on the list and weighs nothing. */
+export type Where = "equipped" | "stowed" | "stashed";
+export const WHERES: readonly Where[] = ["equipped", "stowed", "stashed"];
 
 export interface InvItem {
   /** As the player wrote it (or the catalog name when added by lookup). */

@@ -44,6 +44,7 @@ import {
   type Party,
   type PC,
   type Where,
+  WHERES,
 } from "../src/party/model.ts";
 import { formatCoins, kindredClass, loadOf, pcMarkdown } from "../src/party/render.ts";
 import { classOf, emptyRules, type PartyRules } from "../src/party/rules.ts";
@@ -1202,22 +1203,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         ),
         h("td", { class: "num" }, itemNum(pc, it, "qty", 0)),
         measure ? h("td", { class: "num" }, itemNum(pc, it, measure, 0)) : null,
-        h(
-          "td",
-          {},
-          button(
-            it.where,
-            () =>
-              act(() => {
-                const to: Where = it.where === "equipped" ? "stowed" : "equipped";
-                if (to === "stowed" && it.bulky)
-                  throw new Error(`${it.name} is bulky: it takes two hands and can't be stowed.`);
-                it.where = to;
-                return `${pc.name}: ${it.name} → ${to}`;
-              }),
-            "linkish",
-          ),
-        ),
+        h("td", {}, whereSelect(pc, it)),
         h(
           "td",
           { class: "num" },
@@ -1247,14 +1233,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       "aria-label": "Item to add",
     }) as HTMLInputElement;
     const qty = numInput("", { min: "1", placeholder: "qty", "aria-label": "Quantity" });
-    const where = select(
-      [
-        ["", "auto"],
-        ["equipped", "equipped"],
-        ["stowed", "stowed"],
-      ],
-      "",
-    );
+    const where = select([["", "auto"], ...WHERES.map((w): [string, string] => [w, w])], "");
     where.setAttribute("aria-label", "Where it goes");
     const names = [...new Set(rules.catalog.map((c) => c.name))];
     const addForm = form(
@@ -1316,10 +1295,30 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         "p",
         { class: "hint" },
         measure
-          ? `${measure === "weight" ? "Coins" : "Slots"} are per item. Click where an item is to move it.`
-          : "Click where an item is to move it.",
+          ? `${measure === "weight" ? "Coins" : "Slots"} are per item. Stashed items stay behind and count for nothing.`
+          : "Stashed items stay behind and count for nothing.",
       ),
     );
+  }
+
+  /** Where an item is: equipped, stowed, or stashed (left behind). */
+  function whereSelect(pc: PC, it: InvItem): HTMLSelectElement {
+    const el = select(
+      WHERES.map((w): [string, string] => [w, w]),
+      it.where,
+      (v) =>
+        act(() => {
+          const to = v as Where;
+          if (to === "stowed" && it.bulky)
+            throw new Error(`${it.name} is bulky: it takes two hands and can't be stowed.`);
+          it.where = to;
+          return `${pc.name}: ${it.name} → ${to}`;
+        }),
+    );
+    el.setAttribute("aria-label", `Where ${it.name} is`);
+    el.classList.add("where");
+    if (it.where === "stashed") el.dataset.stashed = "";
+    return el;
   }
 
   /** An editable number cell for one item field. A quantity of 0 drops the item. */

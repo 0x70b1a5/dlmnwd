@@ -2072,3 +2072,13 @@ ul.chips-list {
     display: none;
   }
 }
+
+/* A stashed item is on the list but not carried. */
+.party .gear select.where {
+  font: inherit;
+  font-size: 0.85rem;
+}
+.party .gear tr:has(select[data-stashed]) > td:first-child {
+  color: var(--ink-soft);
+  font-style: italic;
+}

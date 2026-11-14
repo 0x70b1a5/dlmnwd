@@ -26,7 +26,7 @@ import {
   slotUse,
   traditionSpells,
 } from "../party/spells.ts";
-import { findMember, type Party, type PC, saveParty, type Where } from "../party/store.ts";
+import { findMember, type Party, type PC, saveParty, type Where, WHERES } from "../party/store.ts";
 import { canLevel, grantXp, levelUp, nextLevelXp } from "../party/xp.ts";
 import { partyContext } from "./party.ts";
 
@@ -119,10 +119,11 @@ export function cmdPc(args: string[]): void {
       return itemCmd(pc, party, rules, rest, args);
 
     case "equip":
-    case "stow": {
+    case "stow":
+    case "stash": {
       const before = loadOf(pc, party, rules);
       const inv = findItem(pc, rest.join(" "));
-      const where: Where = verb === "equip" ? "equipped" : "stowed";
+      const where: Where = verb === "equip" ? "equipped" : verb === "stow" ? "stowed" : "stashed";
       if (where === "stowed" && inv.bulky)
         console.log(`  ⚠ ${inv.name} is bulky: it takes two hands and can't be stowed.`);
       inv.where = where;
@@ -309,7 +310,9 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
           ? "equipped"
           : args.includes("-s") || args.includes("--stowed")
             ? "stowed"
-            : undefined;
+            : args.includes("--stashed")
+              ? "stashed"
+              : undefined;
       const w = flag(args, "--weight");
       const sl = flag(args, "--slots");
       const label = flag(args, "--as");
@@ -359,8 +362,11 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
         else if (k === "name") inv.name = val;
         else if (k === "note") inv.note = val || undefined;
         else if (k === "treasure") inv.treasure = yes(val);
-        else if (k === "where") inv.where = val === "equipped" ? "equipped" : "stowed";
-        else if (k === "ref") {
+        else if (k === "where") {
+          if (!(WHERES as readonly string[]).includes(val))
+            throw new Error(`where: ${WHERES.join("|")}`);
+          inv.where = val as Where;
+        } else if (k === "ref") {
           const { item } = makeItem(rules.catalog, rules.enc, val).resolved;
           if (!item) throw new Error(`"${val}" isn't in the book's equipment lists.`);
           inv.ref = item.name;

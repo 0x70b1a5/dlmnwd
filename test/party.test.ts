@@ -18,6 +18,7 @@ import {
   type PC,
   saveParty,
 } from "../src/party/store.ts";
+import { showPc } from "../src/party/render.ts";
 import { awardParty, canLevel, grantXp, levelUp, xpModifier } from "../src/party/xp.ts";
 
 // An invented catalog and rules set: none of these items, numbers, kindreds,
@@ -458,4 +459,31 @@ test("finds members by any unambiguous part of the name", () => {
   expect(findMember(party, "bram").name).toBe("Bramble Oakhew");
   expect(() => findMember(party, "oakhew")).toThrow(/matches/);
   expect(() => findMember(party, "zed")).toThrow(/No party member/);
+});
+
+test("stashed items stay on the list and count for nothing", () => {
+  const r = rules();
+  const pc = hero();
+  for (const q of ["scalework", "knapsack", "greatmaul"])
+    addItem(pc, makeItem(catalog, r.enc, q).inv);
+  addItem(pc, makeItem(catalog, r.enc, "biscuits", { qty: 6 }).inv);
+  const before = computeLoad(pc, "slots", r.enc, catalog);
+  const weightBefore = computeLoad(pc, "weight", r.enc, catalog).weight;
+  addItem(pc, makeItem(catalog, r.enc, "crate", { where: "stashed" }).inv);
+  addItem(pc, makeItem(catalog, r.enc, "orb", { qty: 30, where: "stashed" }).inv);
+  expect(computeLoad(pc, "slots", r.enc, catalog)).toMatchObject({
+    equippedSlots: before.equippedSlots,
+    stowedSlots: before.stowedSlots,
+    problems: before.problems,
+  });
+  expect(computeLoad(pc, "weight", r.enc, catalog).weight).toBe(weightBefore);
+  // Stashed treasure is not hauled.
+  expect(computeLoad(pc, "basic", r.enc, catalog).problems).toEqual([]);
+  // Stashed armour is not worn, and a stashed knapsack holds nothing.
+  const ac = computeAc(pc, catalog);
+  findItem(pc, "scalework").where = "stashed";
+  expect(computeAc(pc, catalog)).toBe(ac - 4);
+  findItem(pc, "knapsack").where = "stashed";
+  expect(computeLoad(pc, "slots", r.enc, catalog).problems.join()).toMatch(/no backpack or sack/);
+  expect(showPc(pc, freshParty(), r)).toMatch(/Stashed \(not carried\)[\s\S]*Crate/);
 });

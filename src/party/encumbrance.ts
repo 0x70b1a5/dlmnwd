@@ -27,8 +27,13 @@ export function coinCount(c: Coins): number {
   return c.cp + c.sp + c.gp + c.pp;
 }
 
+/** The items the character has on them: all but the stashed ones. */
+export function carriedItems(pc: PC): PC["items"] {
+  return pc.items.filter((i) => i.where !== "stashed");
+}
+
 export function itemsWeight(pc: PC): number {
-  return pc.items.reduce((sum, i) => sum + i.qty * i.weight, 0);
+  return carriedItems(pc).reduce((sum, i) => sum + i.qty * i.weight, 0);
 }
 
 function slotSpeed(enc: EncumbranceRules, used: number, key: "equipped" | "stowed"): number {
@@ -51,7 +56,8 @@ export function computeLoad(
   const coinSlots = enc.coinsPerSlot > 0 ? Math.ceil(coins / enc.coinsPerSlot) : 0;
   const stowedSlots =
     pc.items.filter((i) => i.where === "stowed").reduce((s, i) => s + itemSlots(i), 0) + coinSlots;
-  const holders = pc.items
+  // A stashed sack holds nothing the character carries.
+  const holders = carriedItems(pc)
     .filter((i) =>
       enc.stowContainers.some((w) => new RegExp(`^${w}s?\\b`, "i").test(i.ref ?? i.name)),
     )
@@ -95,7 +101,10 @@ export function computeLoad(
     const bulk = armourBulk(pc, catalog);
     const [free, laden] = enc.basic[bulk] ?? enc.basic.none ?? [40, 30];
     const treasure =
-      coins + pc.items.filter((i) => i.treasure).reduce((s, i) => s + i.qty * i.weight, 0);
+      coins +
+      carriedItems(pc)
+        .filter((i) => i.treasure)
+        .reduce((s, i) => s + i.qty * i.weight, 0);
     const max = enc.weight.at(-1)?.max ?? Infinity;
     if (treasure > max) problems.push(`${treasure} coins of treasure (max ${max}): can't move`);
     return { ...base, speed: treasure > max ? 0 : free, ladenSpeed: laden, headroom: null };
