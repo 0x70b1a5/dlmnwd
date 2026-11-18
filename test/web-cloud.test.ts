@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { Merge } from "../src/party/merge.ts";
 import { normalizeParty, type Party } from "../src/party/model.ts";
 import { INDEX_VERSION } from "../src/version.ts";
 
@@ -42,17 +43,24 @@ beforeEach(() => {
 const party = (...names: string[]): Party =>
   normalizeParty({ members: names.map((name) => ({ name })) }, "test");
 
-function side(local: Party, answer: "mine" | "theirs" | "later" = "theirs") {
+function side(local: Party, answer: "mine" | "theirs" | "both" | "later" = "theirs") {
   const seen = {
     party: local,
     asked: [] as { mine: string[]; theirs: string[]; theirsAt: number | null }[],
     notes: [] as string[],
+    merges: [] as (Merge | null)[],
   };
   return Object.assign(seen, {
     current: () => seen.party,
     replace: (p: Party) => (seen.party = p),
-    choose: async (mine: Party, theirs: Party, t: { theirsAt: number | null }) => {
+    choose: async (
+      mine: Party,
+      theirs: Party,
+      t: { theirsAt: number | null },
+      merge: Merge | null,
+    ) => {
       seen.asked.push({ mine: names(mine)!, theirs: names(theirs)!, theirsAt: t.theirsAt });
+      seen.merges.push(merge);
       return answer;
     },
     note: (t: string) => seen.notes.push(t),
@@ -203,4 +211,61 @@ test("the dialog shows both sides, the differences, and resolves with the choice
   dialog.querySelector<HTMLButtonElement>('[data-choice="theirs"]')!.click();
   expect(await done).toBe("theirs");
   expect(document.querySelector("dialog.conflict")).toBeNull();
+});
+
+test("keep both merges against the last shared party, and saves the result", async () => {
+  const { partySync } = await import("../web/cloud.ts");
+  const s = side(party("Orla Venn"), "both");
+  const sync = partySync(s);
+  await sync.sync(7); // the account takes this party: the shared base
+  // The account gains a member elsewhere; this browser gains another.
+  server = { party: party("Orla Venn", "Bram"), version: server.version + 1 };
+  s.party = party("Orla Venn", "Cole");
+  sync.changed();
+  await new Promise((r) => setTimeout(r, 1400));
+  expect(s.merges[0]?.clashes).toEqual([]);
+  expect(names(s.party)).toEqual(["Orla Venn", "Cole", "Bram"]);
+  expect(names(server.party)).toEqual(["Orla Venn", "Cole", "Bram"]);
+  sync.stop();
+});
+
+test("with no shared party yet, the dialog gets no merge", async () => {
+  const { partySync } = await import("../web/cloud.ts");
+  server = { party: party("Bram"), version: 4 };
+  localStorage.setItem("dlmnwd:cloud", JSON.stringify({ user: 7, version: 2, changed: true }));
+  const s = side(party("Orla Venn"), "later");
+  await partySync(s).sync(7);
+  expect(s.merges).toEqual([null]);
+});
+
+test("the dialog offers keep both only when nothing clashes", async () => {
+  const { chooseParty } = await import("../web/conflict.ts");
+  const { mergeParties } = await import("../src/party/merge.ts");
+  const base = normalizeParty({ members: [{ name: "Orla Venn", hp: 5, maxHp: 9, xp: 0 }] }, "t");
+  const here = structuredClone(base);
+  here.members[0].hp = 9;
+  const there = structuredClone(base);
+  there.members[0].xp = 120;
+  const info = { mineAt: null, theirsAt: null, describe: () => "" };
+  let done = chooseParty(here, there, { ...info, merge: mergeParties(base, here, there) });
+  let dialog = document.querySelector("dialog.conflict")!;
+  expect(dialog.textContent).toContain("From this browser");
+  expect(dialog.textContent).toContain("Orla Venn: HP");
+  expect(dialog.textContent).toContain("Orla Venn: XP");
+  dialog.querySelector<HTMLButtonElement>('[data-choice="both"]')!.click();
+  expect(await done).toBe("both");
+
+  there.members[0].hp = 1; // now both changed HP
+  done = chooseParty(here, there, { ...info, merge: mergeParties(base, here, there) });
+  dialog = document.querySelector("dialog.conflict")!;
+  expect(dialog.querySelector('[data-choice="both"]')).toBeNull();
+  expect(dialog.textContent).toContain("each side changed the same thing");
+  dialog.querySelector<HTMLButtonElement>('[data-choice="later"]')!.click();
+  await done;
+
+  done = chooseParty(here, there, { ...info, merge: null });
+  dialog = document.querySelector("dialog.conflict")!;
+  expect(dialog.textContent).toContain("no copy of the party");
+  dialog.querySelector<HTMLButtonElement>('[data-choice="later"]')!.click();
+  await done;
 });

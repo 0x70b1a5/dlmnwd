@@ -194,7 +194,11 @@ the address until the book is read. Forget book goes back to the first state.
   When two browsers both changed the party, `web/conflict.ts` opens a dialog
   with both sides' members, when each last changed (`PC.updated`, stamped by
   `stampChanged` on each Party tab change), and the differences
-  (`src/party/diff.ts`, pure). Never use `confirm` for this. **The PDF is
+  (`src/party/diff.ts`, pure). Never use `confirm` for this. Each match
+  (a save, or the account's party taken) keeps that party in the browser as the
+  base. `src/party/merge.ts` (pure) merges both sides against it, member by
+  member and field by field, and "Keep both" shows only when no field changed
+  on both sides. **The PDF is
   never sent.** A book is kept only when its text fingerprint (`fingerprint`,
   stored on the `Book`) is one the server lists, so a wrong PDF is not stored.
   A book kept by older parsers (`INDEX_VERSION`) is not used: the PDF is read

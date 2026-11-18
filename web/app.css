@@ -2227,3 +2227,17 @@ a.theme-toggle {
     text-align: left;
   }
 }
+.conflict__both h4 {
+  margin: 0.25rem 0;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.conflict__both li,
+.conflict__clashes li {
+  padding: 0.1rem 0;
+  font-size: 0.9rem;
+}
+.conflict__clashes li::before {
+  content: "✕ ";
+  color: var(--ember);
+}

@@ -10,6 +10,7 @@
 
 import type { Party } from "../src/party/model.ts";
 import { normalizeParty } from "../src/party/model.ts";
+import { type Merge, mergeParties } from "../src/party/merge.ts";
 import { INDEX_VERSION } from "../src/version.ts";
 import type { Book } from "./book.ts";
 
@@ -133,6 +134,25 @@ function writeSync(s: SyncState): void {
   } catch {}
 }
 
+const BASE = "dlmnwd:cloud:base";
+
+/** The party as this browser and the account last had it alike: the base a
+ *  merge compares both sides with. Kept for one account. */
+function readBase(user: number): Party | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BASE) ?? "null");
+    return raw?.user === user ? normalizeParty(raw.party, "The last shared party") : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeBase(user: number, party: unknown): void {
+  try {
+    localStorage.setItem(BASE, JSON.stringify({ user, party }));
+  } catch {}
+}
+
 export interface PartySide {
   current(): Party;
   /** Take the account's party, no question asked. */
@@ -142,7 +162,9 @@ export interface PartySide {
     mine: Party,
     theirs: Party,
     times: { mineAt: number | null; theirsAt: number | null },
-  ): Promise<"mine" | "theirs" | "later">;
+    /** Both kept: null when this browser has no base to merge with. */
+    merge: Merge | null,
+  ): Promise<"mine" | "theirs" | "both" | "later">;
   /** Say what happened. */
   note(text: string, kind: "info" | "error"): void;
 }
@@ -164,12 +186,15 @@ export function partySync(side: PartySide): {
   let paused = false;
 
   async function push(state: SyncState): Promise<void> {
+    // What is sent, as it is now: the party can change while it is on its way.
+    const sent = JSON.parse(JSON.stringify(side.current())) as Party;
     try {
       const { version } = await call<{ version: number }>("party", {
-        party: side.current(),
+        party: sent,
         version: state.version,
       });
       writeSync({ user: state.user, version, changed: false, at: state.at });
+      writeBase(state.user, sent);
     } catch (err) {
       if (err instanceof CloudError && err.status === 409) return pull(state.user);
       side.note(`The party was not saved to your account: ${(err as Error).message}`, "error");
@@ -185,7 +210,13 @@ export function partySync(side: PartySide): {
           { user: id, version: 0, changed: side.current().members.length > 0 };
     const got = await call<{ party: unknown; version: number; updated?: number }>("party");
     if (got.version === 0) return push(state); // nothing kept yet: keep this one
-    if (got.version === state.version) return state.changed ? push(state) : undefined;
+    if (got.version === state.version) {
+      if (state.changed) return push(state);
+      // In step and unchanged: this party is the shared one. Keep it as the base
+      // when there is none yet (a browser that synced before bases were kept).
+      if (!readBase(id)) writeBase(id, side.current());
+      return;
+    }
     const theirs = normalizeParty(got.party, "The account's party");
     const mine = side.current();
     const same = JSON.stringify(theirs) === JSON.stringify(mine);
@@ -193,15 +224,24 @@ export function partySync(side: PartySide): {
       if (!same)
         side.replace(theirs, `The party from your account (${plural(theirs.members.length)}).`);
       writeSync({ user: id, version: got.version, changed: false });
+      writeBase(id, theirs);
       return;
     }
-    const choice = await side.choose(mine, theirs, {
-      mineAt: state.at ?? null,
-      theirsAt: got.updated ? got.updated * 1000 : null,
-    });
+    const base = readBase(id);
+    const merge = base ? mergeParties(base, mine, theirs) : null;
+    const choice = await side.choose(
+      mine,
+      theirs,
+      { mineAt: state.at ?? null, theirsAt: got.updated ? got.updated * 1000 : null },
+      merge,
+    );
     if (choice === "theirs") {
       side.replace(theirs, `The party from your account (${plural(theirs.members.length)}).`);
       writeSync({ user: id, version: got.version, changed: false });
+      writeBase(id, theirs);
+    } else if (choice === "both" && merge && merge.clashes.length === 0) {
+      side.replace(merge.party, `Kept the changes from this browser and from your account.`);
+      await push({ user: id, version: got.version, changed: true, at: Date.now() });
     } else if (choice === "mine")
       await push({ user: id, version: got.version, changed: true, at: state.at });
     else paused = true; // "later": nothing is sent or taken; the next check asks again

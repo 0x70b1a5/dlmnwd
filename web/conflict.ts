@@ -3,10 +3,11 @@
 // sides' members, when each was last changed, and what differs. Pure DOM.
 
 import { type MemberDiff, partyDiff } from "../src/party/diff.ts";
+import type { Clash, Merge, Taken } from "../src/party/merge.ts";
 import type { Party, PC } from "../src/party/model.ts";
 import { h } from "./sheet.ts";
 
-export type Choice = "mine" | "theirs" | "later";
+export type Choice = "mine" | "theirs" | "both" | "later";
 
 export interface ConflictInfo {
   /** When each copy last changed (ms since 1970); null when not known. */
@@ -14,6 +15,8 @@ export interface ConflictInfo {
   theirsAt: number | null;
   /** "Elf Enchanter 3" for a member, from the book's names. */
   describe(pc: PC): string;
+  /** Both kept (merge.ts); null when this browser has no base to merge with. */
+  merge?: Merge | null;
 }
 
 function when(ms: number | null | undefined): string {
@@ -67,6 +70,54 @@ function diffRow(d: MemberDiff): HTMLElement {
   );
 }
 
+/** "Orla Venn: HP", "Orla Venn added", "Day". */
+function takenLine(t: Taken | Clash): string {
+  if (!t.member) return t.what;
+  return t.what === "added" || t.what === "removed"
+    ? `${t.member} ${t.what}`
+    : `${t.member}: ${t.what}`;
+}
+
+/** A titled list, or nothing when it is empty. */
+function group(title: string, lines: string[]): HTMLElement | null {
+  return lines.length
+    ? h("div", {}, h("h4", {}, title), h("ul", {}, ...lines.map((l) => h("li", {}, l))))
+    : null;
+}
+
+/** What keeping both gives, or why it can't be done. */
+function bothSection(merge: Merge | null | undefined): HTMLElement {
+  if (!merge)
+    return h(
+      "p",
+      { class: "sub" },
+      "Both can't be kept this time: this browser has no copy of the party as it was when the two last matched. From now on it keeps one.",
+    );
+  if (merge.clashes.length)
+    return h(
+      "div",
+      { class: "conflict__both" },
+      h("p", { class: "sub" }, "Both can't be kept: each side changed the same thing."),
+      h(
+        "ul",
+        { class: "conflict__clashes" },
+        ...merge.clashes.map((c) => h("li", {}, takenLine(c))),
+      ),
+    );
+  const from = (where: Taken["side"]) => merge.taken.filter((t) => t.side === where).map(takenLine);
+  return h(
+    "div",
+    { class: "conflict__both" },
+    h("p", { class: "sub" }, "No change clashes, so both can be kept. Keeping both takes:"),
+    h(
+      "div",
+      { class: "conflict__sides" },
+      group("From this browser", from("here")),
+      group("From your account", from("there")),
+    ),
+  );
+}
+
 /** Ask which copy to keep. Resolves when the user chooses; Escape is "later". */
 export function chooseParty(mine: Party, theirs: Party, info: ConflictInfo): Promise<Choice> {
   const diff = partyDiff(mine, theirs);
@@ -81,12 +132,15 @@ export function chooseParty(mine: Party, theirs: Party, info: ConflictInfo): Pro
     b.addEventListener("click", () => finish(choice));
     return b;
   };
+  const canMerge = !!info.merge && info.merge.clashes.length === 0;
   const parts: (HTMLElement | null)[] = [
     h("h2", { id: "conflict-title", tabindex: "-1", autofocus: "" }, "Two versions of your party"),
     h(
       "p",
       { class: "sub" },
-      "This browser and your account both changed the party since they last matched. Keep one; it replaces the other.",
+      canMerge
+        ? "This browser and your account both changed the party since they last matched. Keep both, or keep one in place of the other."
+        : "This browser and your account both changed the party since they last matched. Keep one; it replaces the other.",
     ),
     h(
       "div",
@@ -106,17 +160,20 @@ export function chooseParty(mine: Party, theirs: Party, info: ConflictInfo): Pro
     same > 0 && differs.length
       ? h("p", { class: "sub" }, `${plural(same, "other member")} the same in both.`)
       : null,
+    h("h3", {}, "Keep both"),
+    bothSection(info.merge),
     h(
       "div",
       { class: "conflict__go" },
-      btn("Keep this browser's", "mine", "btn"),
-      btn("Use the account's", "theirs", "btn"),
+      canMerge ? btn("Keep both", "both", "btn") : null,
+      btn("Keep this browser's", "mine", canMerge ? "btn ghost" : "btn"),
+      btn("Use the account's", "theirs", canMerge ? "btn ghost" : "btn"),
       btn("Decide later", "later", "btn ghost"),
     ),
     h(
       "p",
       { class: "hint" },
-      "Using the account's party can be undone in the Party tab. Keeping this browser's replaces the account's copy for good.",
+      "Keeping both or using the account's party can be undone in the Party tab. Keeping this browser's replaces the account's copy for good.",
     ),
   ];
   dialog.append(...parts.filter((p): p is HTMLElement => p !== null));

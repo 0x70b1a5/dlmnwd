@@ -401,9 +401,10 @@ const accountEl = $<HTMLElement>("account");
 const sync = partySync({
   current: () => party.current(),
   replace: (p, text) => party.replace(p, text),
-  choose: (mine, theirs, times) =>
+  choose: (mine, theirs, times, merge) =>
     chooseParty(mine, theirs, {
       ...times,
+      merge,
       describe: (pc) =>
         `${book ? kindredClass(pc, bookRules(book)) : [pc.kindred, pc.class].join(" ")} ${pc.level}`,
     }),
