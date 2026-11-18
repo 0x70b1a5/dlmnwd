@@ -88,6 +88,11 @@ export interface PartyView {
   select(name: string): void;
   /** Offer a party from elsewhere (a link) in place of this one. */
   offer(party: Party, from: string): void;
+  /** Put a party in place of this one with no question (the account's, when this
+   *  browser has made no change since). Undo brings this one back. */
+  replace(party: Party, said: string): void;
+  /** The party as it is now. */
+  current(): Party;
 }
 
 /** A note under the party bar; `details` lists what a change found on the way. */
@@ -108,6 +113,8 @@ export interface PartyHooks {
   onNote?(text: string, kind: "info" | "error"): void;
   /** A spell's entry in the saved book, for a spell the member can prepare. */
   spell?(name: string): SpellDetail | undefined;
+  /** Hears the party each time a change is saved in this browser. */
+  onSave?(party: Party): void;
 }
 
 /** Show the party in `root`. */
@@ -125,6 +132,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     message = { text: (err as Error).message, kind: "error" };
   }
   let selected = party.members.length > 0 ? 0 : -1;
+  // True while a change comes from elsewhere (the account), so it is not sent back.
+  let quiet = false;
   // The control the user last used, and whether the change it asked for was
   // made. The fields beside it are then empty again on the next draw.
   let used: Element | null = null;
@@ -154,6 +163,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       });
       if (history.length > HISTORY) history.shift();
       storedOk = storeParty(party);
+      if (!quiet) hooks.onSave?.(party);
       message = note?.text ? note : null;
       changed = true;
     } catch (err) {
@@ -171,6 +181,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     party = normalizeParty(JSON.parse(last.party), "The party");
     selected = last.selected;
     storedOk = storeParty(party);
+    hooks.onSave?.(party);
     message = { text: `Undone: ${clip(last.label, 90)}`, kind: "info" };
     hooks.onNote?.(message.text, "info");
     render();
@@ -1676,12 +1687,26 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
 
   return {
     offer: take,
+    replace(p, said) {
+      quiet = true;
+      try {
+        act(() => {
+          party = p;
+          selected = party.members.length > 0 ? 0 : -1;
+          return { text: said, kind: "info", details: repairParty(party, rules) };
+        });
+      } finally {
+        quiet = false;
+      }
+    },
+    current: () => party,
     setRules(r) {
       rules = r;
       // Members saved with no Save Targets take them from the book's tables.
       const fixed = repairParty(party, rules);
       if (fixed.length > 0) {
         storedOk = storeParty(party);
+        hooks.onSave?.(party);
         const text = fixed.some((f) => f.includes("Save Targets"))
           ? "Save Targets were missing."
           : "Gear slots are counted again.";

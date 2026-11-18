@@ -35,6 +35,8 @@ export interface Book {
   spells: SpellDetail[];
   /** The party rules' lookup tables, by their index names (party/book.ts). */
   partyLookups: Record<string, unknown>;
+  /** The book's text fingerprint (cloud.ts), for a server to know the right book. */
+  fingerprint?: string;
 }
 
 /** Parse everything the app uses from the Player's Book pages. */

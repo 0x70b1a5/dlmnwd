@@ -2082,3 +2082,21 @@ ul.chips-list {
   color: var(--ink-soft);
   font-style: italic;
 }
+
+/* Signed in to the server that keeps saves (cloud.ts), when the deploy has one. */
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.account[hidden] {
+  display: none;
+}
+.account__name {
+  font: 600 0.8rem/1 var(--ui);
+  color: var(--ink-soft);
+}
+a.theme-toggle {
+  text-decoration: none;
+  white-space: nowrap;
+}

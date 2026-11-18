@@ -31,6 +31,20 @@ import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
 import { h, renderSheet } from "./sheet.ts";
 import { mountShop } from "./shop.ts";
+import {
+  accountBook,
+  bookWanted,
+  CLOUD,
+  CloudError,
+  fingerprint,
+  forgetAccountBook,
+  keepBook,
+  type Me,
+  me,
+  partySync,
+  signOut,
+} from "./cloud.ts";
+import { INDEX_VERSION } from "../src/version.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const fileInput = $<HTMLInputElement>("file");
@@ -148,7 +162,28 @@ function renderWelcome(): void {
         "What the page reads is kept in this browser, so you choose the PDF once. No PDF? ",
         h("a", { href: BUY }, "Buy the book."),
       ),
+      accountLine(),
     ),
+  );
+}
+
+/** On the welcome page, when the deploy keeps saves on a server. */
+function accountLine(): HTMLElement | null {
+  if (!CLOUD || !account) return null;
+  if (account.user)
+    return h(
+      "p",
+      { class: "sub" },
+      `Signed in as ${account.user.name}. When you choose the PDF, the rules read from it are kept on your account, for your other browsers. The PDF itself is not sent.`,
+    );
+  const via = account.signIn[0];
+  if (!via) return null;
+  return h(
+    "p",
+    { class: "sub" },
+    "Read the book in another browser before? ",
+    h("a", { href: via.url }, `Sign in with ${via.label}`),
+    " to use the rules and the party kept on your account.",
   );
 }
 
@@ -257,17 +292,20 @@ async function load(file: File): Promise<void> {
   renderIdle();
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const parsed = parseBook(await extractPagesEmulated(bytes), file.name);
+    const pages = await extractPagesEmulated(bytes);
+    const parsed = parseBook(pages, file.name);
     if (parsed.kindreds.length === 0 || parsed.classes.length === 0) {
       setStatus("No kindreds or classes found. Is this the Dolmenwood Player's Book?", "error");
       return;
     }
+    parsed.fingerprint = await fingerprint(pages);
     const kept = saveBook(parsed);
     useBook(parsed);
     setStatus(
       `Loaded ${parsed.kindreds.length} kindreds, ${parsed.classes.length} classes.` +
         (kept ? " Kept in this browser for next time." : ""),
     );
+    if (account?.user) void keepOnAccount(parsed);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     setStatus(`Couldn't read that PDF: ${detail}`, "error");
@@ -300,6 +338,14 @@ forgetBtn.addEventListener("click", () => {
   forgetBook();
   forgetBtn.hidden = true;
   setStatus("The book is forgotten. This page holds no book data until you load the PDF again.");
+  if (account?.user && account.book)
+    forgetAccountBook().then(
+      () => {
+        if (account) account.book = null;
+        setStatus("The book is forgotten here and on your account. Load the PDF again to use it.");
+      },
+      (err: Error) => setStatus(`Forgotten here, but not on your account: ${err.message}`, "error"),
+    );
   book = null;
   setRiteEnabled(false);
   kindredSel.replaceChildren();
@@ -347,6 +393,97 @@ new ResizeObserver(() =>
   document.body.style.setProperty("--dock-h", `${table.dock.offsetHeight}px`),
 ).observe(table.dock);
 
+// ── the account (cloud.ts), when the deploy names a server ─────────────────
+let account: Me | null = null;
+const accountEl = $<HTMLElement>("account");
+const sync = partySync({
+  current: () => party.current(),
+  replace: (p, text) => party.replace(p, text),
+  ask: (q) => confirm(q),
+  note: (text, kind) => table.say("Account", text, kind === "error" ? "miss" : ""),
+});
+
+function renderAccount(): void {
+  accountEl.hidden = !account;
+  if (!account) return accountEl.replaceChildren();
+  if (account.user) {
+    const out = h("button", { type: "button", class: "theme-toggle" }, "Sign out");
+    out.title = "Sign out here and on MORC. What this browser keeps stays.";
+    out.addEventListener("click", () => void leave());
+    accountEl.replaceChildren(h("span", { class: "account__name" }, account.user.name), out);
+    return;
+  }
+  const via = account.signIn[0];
+  accountEl.replaceChildren(via ? h("a", { class: "theme-toggle", href: via.url }, "Sign in") : "");
+}
+
+/** Keep this browser's book on the account, if it is the right book. */
+async function keepOnAccount(b: Book): Promise<void> {
+  try {
+    await keepBook(b);
+    if (account)
+      account.book = {
+        fingerprint: b.fingerprint!,
+        index_version: b.version,
+        updated: Date.now() / 1000,
+      };
+    setStatus(`${said.msg} Kept on your account too.`.trim());
+  } catch (err) {
+    if (err instanceof CloudError && err.status === 422)
+      setStatus("The server does not know this PDF, so only this browser keeps what it read.");
+    else setStatus(`Not kept on your account: ${(err as Error).message}`, "error");
+  }
+}
+
+/** Ask the server who is signed in, then bring the book and the party in line. */
+async function connect(): Promise<void> {
+  if (!CLOUD) return;
+  try {
+    account = await me();
+  } catch {
+    account = null; // no server, or none that answers this page: this browser only
+  }
+  renderAccount();
+  renderIdle();
+  if (!account?.user) return sync.stop();
+  const kept = account.book;
+  if (!book && kept?.index_version === INDEX_VERSION) {
+    setStatus("Reading the book kept on your account…");
+    try {
+      const b = await accountBook();
+      if (b) {
+        saveBook(b);
+        useBook(b);
+        setStatus(`Using the rules kept on your account, read from ${b.fileName}.`);
+      }
+    } catch (err) {
+      setStatus(`The book on your account could not be read: ${(err as Error).message}`, "error");
+    }
+  } else if (!book && kept)
+    setStatus(
+      "The book on your account was read by an older version of this page. Choose the PDF once more.",
+    );
+  else if (book && bookWanted(account, book)) await keepOnAccount(book);
+  else if (book && !book.fingerprint && !kept)
+    setStatus(`${said.msg} Choose the PDF once more to keep its rules on your account.`.trim());
+  await sync.sync(account.user.id);
+}
+
+async function leave(): Promise<void> {
+  try {
+    await signOut();
+  } catch (err) {
+    table.say("Account", (err as Error).message, "miss");
+  }
+  sync.stop();
+  void connect();
+}
+
+// Another browser may have changed the party while this one was away.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && account?.user) void sync.sync(account.user.id);
+});
+
 const partyCount = $<HTMLSpanElement>("party-count");
 const party = mountParty($<HTMLElement>("party"), {
   onCount(n) {
@@ -357,6 +494,7 @@ const party = mountParty($<HTMLElement>("party"), {
   sheet: (pc, members, rules) => memberSheet(pc, members, rules, book),
   spell: (name) => (book ? spellMap(book).get(name.toLowerCase()) : undefined),
   onNote: (text, kind) => table.say("Party", text, kind === "error" ? "miss" : ""),
+  onSave: () => sync.changed(),
 });
 
 // A link made with "Copy link" holds a party after the `#`. Offer it, then take
@@ -479,3 +617,4 @@ if (saved) {
   setBookState();
   renderIdle();
 }
+void connect();

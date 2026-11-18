@@ -279,6 +279,16 @@ keyed wilderness entry.
 Roadmap: kindred/class trait names into `dw new`; reflow two-column monster pages
 for fuller Hoard/special coverage; `treasure`.
 
+## Saves on a server (optional)
+
+A deploy can keep each player's party, and the rules read from their own
+Player's Book, on a server, so they follow the player to another browser. Build
+with the server's address: `DW_PUBLIC_CLOUD=https://morc.example bun run
+web:build`. The server is a MORC instance with `instance/dorc.json` (see
+`cromweb/dorc.py` there). The PDF is never sent; only what the page reads from
+it, and only for a PDF the server recognises. Without the variable, the app
+keeps everything in the browser, as before.
+
 ## License
 
 Code: MIT (see `LICENSE`). Game data is yours and not covered here.

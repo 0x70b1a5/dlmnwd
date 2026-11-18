@@ -185,6 +185,17 @@ clock need no book, so they stay. With a book and no character, the sheet
 gives the next step (`renderReady`). A party link opened with no book stays in
 the address until the book is read. Forget book goes back to the first state.
 
+- `web/cloud.ts` keeps saves on a server, only in a build that names one:
+  `DW_PUBLIC_CLOUD=https://… bun run web:build` (`--env='DW_PUBLIC_*'` writes
+  it into the bundle). With none, the page is as before and shows nothing of it.
+  The server is a MORC instance (crom's `cromweb/dorc.py`). The page signs in
+  there with Discord and calls `/api/dorc/*` with that session's cookie. The
+  server keeps the party (versioned: `partySync` asks the user when two
+  browsers both changed it) and the account's own parsed `Book`. **The PDF is
+  never sent.** A book is kept only when its text fingerprint (`fingerprint`,
+  stored on the `Book`) is one the server lists, so a wrong PDF is not stored.
+  A book kept by older parsers (`INDEX_VERSION`) is not used: the PDF is read
+  once more.
 - `web/sheet.ts` is **pure DOM rendering**, shared by `main.ts` and `mock.ts` (the
   prefilled fixture for iterating on the UI without a PDF). Keep sheet.ts free of
   parsing and file I/O.
