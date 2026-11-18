@@ -114,6 +114,8 @@ interface SyncState {
   user: number;
   version: number;
   changed: boolean;
+  /** When this browser's party last changed (ms since 1970). */
+  at?: number;
 }
 
 function readSync(): SyncState | null {
@@ -135,8 +137,12 @@ export interface PartySide {
   current(): Party;
   /** Take the account's party, no question asked. */
   replace(p: Party, said: string): void;
-  /** Ask the user; true takes the account's party. */
-  ask(question: string): boolean;
+  /** Both changed: ask the user which to keep. */
+  choose(
+    mine: Party,
+    theirs: Party,
+    times: { mineAt: number | null; theirsAt: number | null },
+  ): Promise<"mine" | "theirs" | "later">;
   /** Say what happened. */
   note(text: string, kind: "info" | "error"): void;
 }
@@ -154,6 +160,8 @@ export function partySync(side: PartySide): {
   let user: number | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let busy: Promise<void> = Promise.resolve();
+  // After "Decide later": changes are marked, not sent, until the next check.
+  let paused = false;
 
   async function push(state: SyncState): Promise<void> {
     try {
@@ -161,7 +169,7 @@ export function partySync(side: PartySide): {
         party: side.current(),
         version: state.version,
       });
-      writeSync({ user: state.user, version, changed: false });
+      writeSync({ user: state.user, version, changed: false, at: state.at });
     } catch (err) {
       if (err instanceof CloudError && err.status === 409) return pull(state.user);
       side.note(`The party was not saved to your account: ${(err as Error).message}`, "error");
@@ -175,7 +183,7 @@ export function partySync(side: PartySide): {
         ? known
         : // Another account (or the first sign-in here): this browser's party is new to it.
           { user: id, version: 0, changed: side.current().members.length > 0 };
-    const got = await call<{ party: unknown; version: number }>("party");
+    const got = await call<{ party: unknown; version: number; updated?: number }>("party");
     if (got.version === 0) return push(state); // nothing kept yet: keep this one
     if (got.version === state.version) return state.changed ? push(state) : undefined;
     const theirs = normalizeParty(got.party, "The account's party");
@@ -187,15 +195,16 @@ export function partySync(side: PartySide): {
       writeSync({ user: id, version: got.version, changed: false });
       return;
     }
-    const take = side.ask(
-      `Your account has a party of ${plural(theirs.members.length)}, saved from another browser. ` +
-        `This browser's party (${plural(mine.members.length)}) has changes too.\n\n` +
-        `OK uses your account's party here. Cancel keeps this browser's party and saves it to your account in place of the other.`,
-    );
-    if (take) {
+    const choice = await side.choose(mine, theirs, {
+      mineAt: state.at ?? null,
+      theirsAt: got.updated ? got.updated * 1000 : null,
+    });
+    if (choice === "theirs") {
       side.replace(theirs, `The party from your account (${plural(theirs.members.length)}).`);
       writeSync({ user: id, version: got.version, changed: false });
-    } else await push({ user: id, version: got.version, changed: true });
+    } else if (choice === "mine")
+      await push({ user: id, version: got.version, changed: true, at: state.at });
+    else paused = true; // "later": nothing is sent or taken; the next check asks again
   }
 
   /** Run one step at a time, so a save and a check do not cross. */
@@ -205,16 +214,23 @@ export function partySync(side: PartySide): {
   return {
     sync(id) {
       user = id;
+      paused = false;
       return queue(() => pull(id));
     },
     changed() {
       const state = readSync();
       if (user === null) {
         // Signed out: the change is this browser's. Mark it, for the next sign-in.
-        if (state) writeSync({ ...state, changed: true });
+        if (state) writeSync({ ...state, changed: true, at: Date.now() });
         return;
       }
-      writeSync({ user, version: state?.user === user ? state.version : 0, changed: true });
+      writeSync({
+        user,
+        version: state?.user === user ? state.version : 0,
+        changed: true,
+        at: Date.now(),
+      });
+      if (paused) return;
       clearTimeout(timer);
       const id = user;
       timer = setTimeout(

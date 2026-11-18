@@ -31,6 +31,8 @@ import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
 import { h, renderSheet } from "./sheet.ts";
 import { mountShop } from "./shop.ts";
+import { chooseParty } from "./conflict.ts";
+import { kindredClass } from "../src/party/render.ts";
 import {
   accountBook,
   bookWanted,
@@ -399,7 +401,12 @@ const accountEl = $<HTMLElement>("account");
 const sync = partySync({
   current: () => party.current(),
   replace: (p, text) => party.replace(p, text),
-  ask: (q) => confirm(q),
+  choose: (mine, theirs, times) =>
+    chooseParty(mine, theirs, {
+      ...times,
+      describe: (pc) =>
+        `${book ? kindredClass(pc, bookRules(book)) : [pc.kindred, pc.class].join(" ")} ${pc.level}`,
+    }),
   note: (text, kind) => table.say("Account", text, kind === "error" ? "miss" : ""),
 });
 

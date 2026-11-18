@@ -28,7 +28,7 @@ beforeEach(() => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ path, body });
     if (path === "party" && !body)
-      return reply(200, { party: server.party, version: server.version });
+      return reply(200, { party: server.party, version: server.version, updated: 1_700_000_000 });
     if (path === "party") {
       if (body.version !== server.version)
         return reply(409, { error: "stale", version: server.version });
@@ -42,12 +42,19 @@ beforeEach(() => {
 const party = (...names: string[]): Party =>
   normalizeParty({ members: names.map((name) => ({ name })) }, "test");
 
-function side(local: Party, answer = true) {
-  const seen = { party: local, asked: [] as string[], notes: [] as string[] };
+function side(local: Party, answer: "mine" | "theirs" | "later" = "theirs") {
+  const seen = {
+    party: local,
+    asked: [] as { mine: string[]; theirs: string[]; theirsAt: number | null }[],
+    notes: [] as string[],
+  };
   return Object.assign(seen, {
     current: () => seen.party,
     replace: (p: Party) => (seen.party = p),
-    ask: (q: string) => (seen.asked.push(q), answer),
+    choose: async (mine: Party, theirs: Party, t: { theirsAt: number | null }) => {
+      seen.asked.push({ mine: names(mine)!, theirs: names(theirs)!, theirsAt: t.theirsAt });
+      return answer;
+    },
     note: (t: string) => seen.notes.push(t),
   });
 }
@@ -99,16 +106,20 @@ test("both changed: the user chooses, and keeping this one replaces the account'
   const { partySync } = await import("../web/cloud.ts");
   server = { party: party("Bram"), version: 4 };
   localStorage.setItem("dlmnwd:cloud", JSON.stringify({ user: 7, version: 2, changed: true }));
-  const keep = side(party("Orla Venn"), false);
+  const keep = side(party("Orla Venn"), "mine");
   await partySync(keep).sync(7);
-  expect(keep.asked[0]).toContain("1 member");
+  expect(keep.asked[0]).toEqual({
+    mine: ["Orla Venn"],
+    theirs: ["Bram"],
+    theirsAt: 1_700_000_000_000,
+  });
   expect(names(keep.party)).toEqual(["Orla Venn"]);
   expect(names(server.party)).toEqual(["Orla Venn"]);
   expect(server.version).toBe(5);
 
   server = { party: party("Bram"), version: 9 };
   localStorage.setItem("dlmnwd:cloud", JSON.stringify({ user: 7, version: 5, changed: true }));
-  const take = side(party("Orla Venn"), true);
+  const take = side(party("Orla Venn"), "theirs");
   await partySync(take).sync(7);
   expect(names(take.party)).toEqual(["Bram"]);
   expect(server.version).toBe(9);
@@ -116,7 +127,7 @@ test("both changed: the user chooses, and keeping this one replaces the account'
 
 test("a change is sent after a pause, and a stale save asks again", async () => {
   const { partySync } = await import("../web/cloud.ts");
-  const s = side(party("Orla Venn"), true);
+  const s = side(party("Orla Venn"), "theirs");
   const sync = partySync(s);
   await sync.sync(7); // version 1 on the server
   s.party = party("Orla Venn", "Bram");
@@ -133,4 +144,63 @@ test("a change is sent after a pause, and a stale save asks again", async () => 
   expect(s.asked).toHaveLength(1);
   expect(names(s.party)).toEqual(["Cole"]);
   sync.stop();
+});
+
+test("decide later sends and takes nothing, and pauses until the next check", async () => {
+  const { partySync } = await import("../web/cloud.ts");
+  server = { party: party("Bram"), version: 4 };
+  localStorage.setItem("dlmnwd:cloud", JSON.stringify({ user: 7, version: 2, changed: true }));
+  const s = side(party("Orla Venn"), "later");
+  const sync = partySync(s);
+  await sync.sync(7);
+  expect(names(s.party)).toEqual(["Orla Venn"]);
+  expect(names(server.party)).toEqual(["Bram"]);
+  sync.changed();
+  await new Promise((r) => setTimeout(r, 1400));
+  expect(calls.filter((c) => c.body)).toEqual([]);
+  expect(s.asked).toHaveLength(1);
+  await sync.sync(7); // the next check asks again
+  expect(s.asked).toHaveLength(2);
+  sync.stop();
+});
+
+test("the dialog shows both sides, the differences, and resolves with the choice", async () => {
+  const { chooseParty } = await import("../web/conflict.ts");
+  const mine = normalizeParty(
+    {
+      day: 3,
+      members: [
+        { name: "Orla Venn", level: 2, hp: 5, maxHp: 9, updated: Date.UTC(2026, 10, 1, 12) },
+        { name: "Bram", level: 1 },
+      ],
+    },
+    "test",
+  );
+  const theirs = normalizeParty(
+    {
+      day: 4,
+      members: [
+        { name: "Orla Venn", level: 2, hp: 9, maxHp: 9 },
+        { name: "Cole", level: 1 },
+      ],
+    },
+    "test",
+  );
+  const done = chooseParty(mine, theirs, {
+    mineAt: Date.UTC(2026, 10, 1, 12),
+    theirsAt: null,
+    describe: (pc) => `Wisp Warden ${pc.level}`,
+  });
+  const dialog = document.querySelector("dialog.conflict")!;
+  const text = dialog.textContent!;
+  expect(text).toContain("This browser");
+  expect(text).toContain("Wisp Warden 2");
+  expect(text).toContain("last change not recorded");
+  expect(text).toContain("Day: 3 → 4");
+  expect(text).toContain("HP: 5/9 → 9/9");
+  expect(text).toContain("only in this browser");
+  expect(text).toContain("only on the account");
+  dialog.querySelector<HTMLButtonElement>('[data-choice="theirs"]')!.click();
+  expect(await done).toBe("theirs");
+  expect(document.querySelector("dialog.conflict")).toBeNull();
 });

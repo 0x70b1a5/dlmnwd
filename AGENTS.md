@@ -190,8 +190,11 @@ the address until the book is read. Forget book goes back to the first state.
   it into the bundle). With none, the page is as before and shows nothing of it.
   The server is a MORC instance (crom's `cromweb/dorc.py`). The page signs in
   there with Discord and calls `/api/dorc/*` with that session's cookie. The
-  server keeps the party (versioned: `partySync` asks the user when two
-  browsers both changed it) and the account's own parsed `Book`. **The PDF is
+  server keeps the party (versioned) and the account's own parsed `Book`.
+  When two browsers both changed the party, `web/conflict.ts` opens a dialog
+  with both sides' members, when each last changed (`PC.updated`, stamped by
+  `stampChanged` on each Party tab change), and the differences
+  (`src/party/diff.ts`, pure). Never use `confirm` for this. **The PDF is
   never sent.** A book is kept only when its text fingerprint (`fingerprint`,
   stored on the `Book`) is one the server lists, so a wrong PDF is not stored.
   A book kept by older parsers (`INDEX_VERSION`) is not used: the PDF is read

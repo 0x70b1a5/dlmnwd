@@ -107,6 +107,8 @@ export interface PC {
   /** An adventurer retainer: counts for XP division, earns half. */
   retainer: boolean;
   status: "active" | "retired" | "dead";
+  /** When a change last touched this member (ms since 1970), where it is known. */
+  updated?: number;
 }
 
 export type EncMethod = "weight" | "slots" | "basic";
@@ -213,4 +215,13 @@ export function normalizeParty(raw: unknown, source: string): Party {
     ...p,
     members: p.members.map((m) => Object.assign(blankPc(m.name), m)),
   };
+}
+
+const plain = (m: PC): string => JSON.stringify({ ...m, updated: undefined });
+
+/** Stamp the members a change touched (by name) with `now`. A member with a new
+ *  name counts as touched. */
+export function stampChanged(before: Party, after: Party, now: number): void {
+  const was = new Map(before.members.map((m) => [m.name, plain(m)]));
+  for (const m of after.members) if (was.get(m.name) !== plain(m)) m.updated = now;
 }

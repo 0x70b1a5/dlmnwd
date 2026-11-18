@@ -40,6 +40,7 @@ import {
   type EncMethod,
   freshParty,
   normalizeParty,
+  stampChanged,
   type InvItem,
   type Party,
   type PC,
@@ -155,6 +156,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const wasSelected = selected;
     try {
       const said = change();
+      if (!quiet) stampChanged(JSON.parse(before), party, Date.now());
       const note = typeof said === "string" ? { text: said, kind: "info" as const } : said;
       history.push({
         label: note?.text || "the last change",

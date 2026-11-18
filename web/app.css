@@ -2100,3 +2100,130 @@ a.theme-toggle {
   text-decoration: none;
   white-space: nowrap;
 }
+
+/* Two versions of the party: this browser's and the account's (conflict.ts). */
+.conflict {
+  width: min(52rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 1rem 1.25rem;
+  border: 2px solid var(--line);
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: var(--ui);
+}
+.conflict::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.conflict h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+}
+.conflict h3 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--ember-2);
+}
+.conflict .sub {
+  margin: 0.25rem 0;
+  color: var(--ink-soft);
+}
+.conflict__sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+.conflict__side {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  padding: 0.5rem 0.75rem;
+}
+.conflict__side h3 {
+  margin-top: 0;
+}
+.conflict ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.conflict__side li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 0.75rem;
+  padding: 0.25rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 35%, transparent);
+}
+.conflict__name {
+  font-weight: 700;
+}
+.conflict__what {
+  grid-column: 1;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+.conflict__side .conflict__when {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  text-align: right;
+}
+.conflict__when {
+  margin: 0 0 0.25rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.conflict__diffs > li {
+  padding: 0.35rem 0.5rem;
+  margin-bottom: 0.35rem;
+  border-left: 3px solid var(--line);
+  background: var(--paper);
+}
+.conflict__diff--here {
+  border-left-color: var(--ember) !important;
+}
+.conflict__diff--there {
+  border-left-color: var(--ink-soft) !important;
+}
+.conflict__diffs .tag {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+.conflict__diffs li ul {
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.conflict__diffs li li {
+  padding-left: 0.75rem;
+}
+.conflict__party li {
+  font-size: 0.9rem;
+}
+.conflict__go {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.conflict__go .btn {
+  width: auto;
+}
+.conflict h2:focus {
+  outline: none;
+}
+@media (max-width: 640px) {
+  .conflict {
+    padding: 0.75rem;
+  }
+  .conflict__side li {
+    grid-template-columns: 1fr;
+  }
+  .conflict__side .conflict__when {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: left;
+  }
+}
