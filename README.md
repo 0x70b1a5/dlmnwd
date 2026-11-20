@@ -233,7 +233,7 @@ itself, after the `#`, so no server gets it. The link is a copy: it does not
 follow later changes. The gear is listed by where it is: equipped, stowed, on each animal or
 vehicle, and stashed. Drag a row by its grip to reorder it, drop it on a
 container to put it inside, or drop it on a heading to move it there. The
-select on each row does the same. Coins can be added, spent, banked and
+pencil on a row opens its edit line: where the item is, and Remove. Coins can be added, spent, banked and
 withdrawn, and Buy pays the book's price. The selected member shows
 with the most used parts first. A strip with the name, HP, AC, attack, speed and
 saves stays in view while you scroll. Below it are the abilities, XP and gold,

@@ -250,9 +250,14 @@ the address until the book is read. Forget book goes back to the first state.
   container is drawn one level in, under it. A row's grip drags it: drop it
   between rows to reorder, on a row to put it inside, or on a heading to move
   it there. The drag uses pointer events and `elementFromPoint`, and a draw
-  waits until the drag ends. Each move goes through `moveItem`, like the
-  "where" select on each row. Animals and vehicles have their own block: buy or
-  add one from the book's list, rename it, and set its load.
+  waits until the drag ends. A row shows the name, the quantity, the weight
+  or slots, −1 and a pencil. The pencil opens the row's edit line (`edits`):
+  where the item is, where it is kept, and Remove. Each move goes through
+  `moveItem`. Animals and vehicles have their own block in the same idiom:
+  buy or add one from the book's list; its pencil renames it, sets its load
+  or removes it. The gear, coin and roster tables fit a phone's width with
+  no sideways scroll: fixed number columns, names that wrap (two lines, all
+  of them while open), and smaller cells under a 340px container.
 - `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the
   wandering check, the turn clock (`src/turn-clock.ts`, the pure half of
   `src/turn.ts`) and a lookup in the saved book. It is built once; rolls only

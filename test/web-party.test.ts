@@ -172,6 +172,10 @@ test("an item moved to the stash leaves the load, and comes back", async () => {
     items: [{ name: "Tent", qty: 1, weight: 200, slots: 1, where: "stowed" }],
   });
   const place = () => byLabel("Where Tent is") as HTMLSelectElement;
+  // The place is in the row's edit line, which the pencil opens.
+  expect(byLabel("Where Tent is")).toBeUndefined();
+  byLabel("Edit Tent").click();
+  expect(byLabel("Done editing Tent").getAttribute("aria-pressed")).toBe("true");
   expect(place().value).toBe("stowed");
   expect(root.querySelector(".load-line")!.textContent).toContain("200");
   place().value = "stashed";
@@ -222,6 +226,7 @@ test("gear is listed by place, and an item goes into a container or onto an anim
   view.setRules(packRules);
   const heads = () => [...root.querySelectorAll("tr.grp")].map((r) => r.textContent ?? "");
   expect(heads().some((t) => t.startsWith("On Bramble"))).toBe(true);
+  byLabel("Edit Thimble").click();
   await choose("Where Thimble is", "in:i1");
   expect(stored().items[1]).toMatchObject({ in: "i1", where: "stowed" });
   // Inside the knapsack it is drawn one level in, under it.
@@ -230,6 +235,7 @@ test("gear is listed by place, and an item goes into a container or onto an anim
   expect(row.querySelector("td.item")!.getAttribute("style") ?? "").toMatch(/--depth: ?1/);
   expect(notes.at(-1)).toContain("Thimble");
   // The knapsack onto the pony: what is in it goes too.
+  byLabel("Edit Knapsack").click();
   await choose("Where Knapsack is", "on:c1");
   expect(stored().items.map((i: { where: string }) => i.where)).toEqual(["loaded", "loaded"]);
   expect(root.querySelector(".load-line")!.textContent).not.toContain("41");
@@ -247,7 +253,8 @@ test("an animal is bought from the book's list and paid for", async () => {
     expect.objectContaining({ name: "Turnip", type: "Marsh pony", load: 1800, speed: 70 }),
   ]);
   expect(stored().coins.gp).toBe(5);
-  expect(root.textContent).toContain("at half");
+  expect(root.textContent).toContain("3,600 at half Speed");
+  byLabel("Edit Turnip").click();
   byLabel("Remove Turnip").click();
   expect(stored().carriers).toEqual([]);
 });

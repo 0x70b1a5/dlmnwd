@@ -178,6 +178,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     root.addEventListener(type, (e) => void (used = e.target as Element), true);
   // The folds that are open. A redraw builds every fold again, so it reads this.
   const open = new Set<string>();
+  // The gear rows and animals open for editing (the pencil), by member and id.
+  const edits = new Set<string>();
 
   /** Run a change, save, and show its message (or its error). */
   // Undo: the party as it was before each recent change, newest last.
@@ -579,8 +581,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
 
   function roster(): HTMLElement {
     // The columns a narrow screen drops (app.css) are marked `opt`.
-    const head = ["Name", "Kindred & Class", "Lvl", "XP", "HP", "AC", "Load", "Speed"];
-    const cls = ["", "opt", "num", "num opt", "num", "num", "num opt", "num"];
+    const head = ["Name", "Kindred & Class", "Lvl", "XP", "HP", "AC", "Load", "Spd"];
+    // `slim`: dropped on the narrowest screens too (the strip shows the AC).
+    const cls = ["", "opt", "num", "num opt", "num", "num slim", "num opt", "num"];
     const rows = party.members.map((pc, i) => {
       const load = loadOf(pc, party, rules);
       const klass = classOf(rules, pc.class);
@@ -1250,7 +1253,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     // Only the number the party's encumbrance method counts gets a column.
     const measure: "weight" | "slots" | null =
       party.encumbrance === "weight" ? "weight" : party.encumbrance === "slots" ? "slots" : null;
-    const cols = measure ? 5 : 4;
+    const cols = measure ? 4 : 3;
     const body: HTMLElement[] = [];
     for (const g of placeGroups(pc)) {
       const shown = g.rows.length > 0 || !!g.carrier;
@@ -1294,28 +1297,31 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       ...load.problems.map((p) => h("p", { class: "status", "data-kind": "error" }, p)),
       pc.items.length || pc.carriers.length
         ? h(
-            "div",
-            { class: "table-scroll" },
+            "table",
+            { class: "gear" },
             h(
-              "table",
-              { class: "gear" },
-              h(
-                "thead",
-                {},
-                h(
-                  "tr",
-                  {},
-                  h("th", {}, "Item"),
-                  h("th", { class: "num" }, "Qty"),
-                  measure
-                    ? h("th", { class: "num" }, measure === "weight" ? "Coins" : "Slots")
-                    : null,
-                  h("th", {}, "Where"),
-                  h("th", { class: "num" }, ""),
-                ),
-              ),
-              h("tbody", {}, ...body),
+              "colgroup",
+              {},
+              h("col", {}),
+              h("col", { class: "c-q" }),
+              measure ? h("col", { class: "c-w" }) : null,
+              h("col", { class: "c-x" }),
             ),
+            h(
+              "thead",
+              {},
+              h(
+                "tr",
+                {},
+                h("th", {}, "Item"),
+                h("th", { class: "num" }, "Qty"),
+                measure
+                  ? h("th", { class: "num" }, measure === "weight" ? "Coins" : "Slots")
+                  : null,
+                h("th", {}, ""),
+              ),
+            ),
+            h("tbody", {}, ...body),
           )
         : h("p", { class: "hint" }, "Carrying nothing."),
       addItemForm(pc),
@@ -1323,8 +1329,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         "p",
         { class: "hint" },
         measure ? `${measure === "weight" ? "Coins" : "Slots"} are per item. ` : "",
-        "Drag a row by ⠿: onto a heading, between two rows, or onto an item to put it inside. ",
-        "Stashed items stay behind and count for nothing.",
+        "Drag ⠿ onto a heading, between rows, or onto a container. ",
+        "The pencil moves or removes an item. Stashed items count for nothing.",
       ),
     );
   }
@@ -1393,10 +1399,15 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     );
     const id = it.id!;
     on(grip, "pointerdown", (e) => startDrag(e as PointerEvent, id));
-    const off = it.where === "stashed" || it.where === "loaded";
+    const key = editKey(pc, id);
+    const editing = edits.has(key);
+    const cls = [
+      it.where === "stashed" || it.where === "loaded" ? "off" : "",
+      editing ? "editing" : "",
+    ].filter(Boolean);
     return h(
       "tr",
-      { "data-item": id, ...(off ? { class: "off" } : {}) },
+      { "data-item": id, ...(cls.length ? { class: cls.join(" ") } : {}) },
       h(
         "td",
         { class: "item", style: `--depth:${r.depth}` },
@@ -1406,7 +1417,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           grip,
           h(
             "span",
-            { class: "iname" },
+            { class: "iname", title: it.name },
             it.name,
             it.note ? h("span", { class: "muted" }, ` (${it.note})`) : null,
             it.treasure ? h("span", { class: "tag" }, "treasure") : null,
@@ -1421,34 +1432,54 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
               `${fill.used.toLocaleString("en")} of ${amountText(fill.capacity, fill.unit)} in it`,
             )
           : null,
+        editing
+          ? h(
+              "div",
+              { class: "imeta" },
+              whereSelect(pc, it),
+              it.where === "stashed" && !it.in ? keptInput(pc, it) : null,
+              button(
+                "Remove",
+                () => act(() => (removeItem(pc, it), `${pc.name} drops ${it.name}`)),
+                "linkish",
+                "button",
+                `Remove all ${it.name}`,
+              ),
+            )
+          : null,
       ),
       h("td", { class: "num" }, itemNum(pc, it, "qty", 0)),
       measure ? h("td", { class: "num" }, itemNum(pc, it, measure, 0)) : null,
       h(
         "td",
-        { class: "place" },
-        whereSelect(pc, it),
-        it.where === "stashed" && !it.in ? keptInput(pc, it) : null,
-      ),
-      h(
-        "td",
-        { class: "num" },
+        { class: "x" },
         button(
-          "-1",
-          () => act(() => (removeItem(pc, it, 1), `${pc.name} -1 ${it.name}`)),
+          "−1",
+          () => act(() => (removeItem(pc, it, 1), `${pc.name} −1 ${it.name}`)),
           "btn mini",
           "button",
           `Remove one ${it.name}`,
         ),
-        button(
-          "x",
-          () => act(() => (removeItem(pc, it), `${pc.name} drops ${it.name}`)),
-          "btn mini",
-          "button",
-          `Remove all ${it.name}`,
-        ),
+        editToggle(key, it.name, "where it is, or Remove"),
       ),
     );
+  }
+
+  /** The pencil that opens a row's edit line, and the check that closes it. */
+  function editToggle(key: string, name: string, what: string): HTMLElement {
+    const editing = edits.has(key);
+    const b = h("button", {
+      type: "button",
+      class: `iedit${editing ? " on" : ""}`,
+      title: editing ? "Done" : `Edit: ${what}`,
+      "aria-label": `${editing ? "Done editing" : "Edit"} ${name}`,
+      "aria-pressed": `${editing}`,
+    });
+    on(b, "click", () => {
+      if (!edits.delete(key)) edits.add(key);
+      render();
+    });
+    return b;
   }
 
   /** The places an item can be: on the character, on each animal or vehicle,
@@ -1550,6 +1581,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const rows = pc.carriers.map((c) => {
       const t = rules.transport.find((x) => x.name === c.type);
       const l = carrierLoad(pc, c, party.encumbrance, rules.enc);
+      const key = editKey(pc, c.id);
+      const editing = edits.has(key);
       const facts = [
         c.name !== c.type ? c.type : "",
         t?.type && t.type !== c.type ? t.type : "",
@@ -1557,6 +1590,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         t?.hp ? `HP ${t.hp}` : "",
         c.speed !== undefined ? `Speed ${c.speed}` : "",
         ...Object.entries(t?.more ?? {}).map(([k, v]) => `${k}: ${v}`),
+        c.kind === "animal"
+          ? `carries ${c.load.toLocaleString("en")}, ${(c.load * ANIMAL_LOAD.halfSpeedTimes).toLocaleString("en")} at half Speed`
+          : `carries ${c.load.toLocaleString("en")}`,
       ].filter(Boolean);
       const rename = textInput(c.name, (v) =>
         act(() => {
@@ -1568,32 +1604,42 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       rename.setAttribute("aria-label", `Name of ${c.name}`);
       return h(
         "li",
-        { class: "carrier" },
-        rename,
-        h("span", { class: "facts" }, facts.join(" · ")),
+        { class: `carrier${editing ? " editing" : ""}` },
         h(
-          "label",
-          { class: "carries" },
-          "carries ",
-          numInput(
-            `${c.load}`,
-            { min: "0", class: "cell", "aria-label": `Coins ${c.name} carries` },
-            (v) => act(() => void (c.load = Math.max(0, v))),
-          ),
-          c.kind === "animal"
-            ? ` coins at its Speed, ${(c.load * ANIMAL_LOAD.halfSpeedTimes).toLocaleString("en")} at half`
-            : " coins",
+          "div",
+          { class: "cline" },
+          h("b", {}, c.name),
+          h("span", { class: "facts" }, facts.join(" · ")),
+          l.state !== "normal"
+            ? h("span", { class: `load ${l.state}` }, l.state === "slow" ? "half Speed" : "over")
+            : null,
+          editToggle(key, c.name, "its name, its load, or Remove"),
         ),
-        l.state !== "normal"
-          ? h("span", { class: `load ${l.state}` }, l.state === "slow" ? "half Speed" : "over")
+        editing
+          ? h(
+              "div",
+              { class: "imeta" },
+              rename,
+              h(
+                "label",
+                { class: "carries" },
+                "carries ",
+                numInput(
+                  `${c.load}`,
+                  { min: "0", class: "cell", "aria-label": `Coins ${c.name} carries` },
+                  (v) => act(() => void (c.load = Math.max(0, v))),
+                ),
+                " coins",
+              ),
+              button(
+                "Remove",
+                () => act(() => removeCarrier(pc, c)),
+                "linkish",
+                "button",
+                `Remove ${c.name}`,
+              ),
+            )
           : null,
-        button(
-          "Remove",
-          () => act(() => removeCarrier(pc, c)),
-          "btn mini",
-          "button",
-          `Remove ${c.name}`,
-        ),
       );
     });
     const list = rules.transport;
@@ -2367,6 +2413,9 @@ function markDrop(t: Drop | null, shown: boolean): void {
 }
 
 /** "LAND CARTS" → "Land carts". */
+/** A gear row's or an animal's key in the set of those open for editing. */
+const editKey = (pc: PC, id: string): string => `${pc.name}\n${id}`;
+
 const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
 function printable(data: SheetData): HTMLElement {
