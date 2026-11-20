@@ -172,6 +172,18 @@ body[data-book="none"] .shell {
     position: static;
     max-height: none;
   }
+  /* Here the rail stacks above the tabs. Until the first character, it waits
+     (main.ts setRail): the page opens on the tabs, and the Sheet tab's own
+     button generates one. "Choose first" shows it. */
+  body[data-rail="wait"] .rail-cell {
+    display: none;
+  }
+}
+/* "Choose first" is for a screen where the rail waits. */
+@media (min-width: 881px) {
+  .welcome__choose {
+    display: none;
+  }
 }
 
 /* ── Masthead / wordmark ───────────────────────────────────────────────── */

@@ -182,7 +182,10 @@ set by `setBookState` in `main.ts`). The Sheet tab says why the PDF is needed
 and gives one "Choose PDF" button (`renderWelcome`). The rail is hidden, the
 Party tab is disabled and the Table tab has no lookup. The dice and the turn
 clock need no book, so they stay. With a book and no character, the sheet
-gives the next step (`renderReady`). A party link opened with no book stays in
+gives the next step (`renderReady`). On a narrow screen the rail
+stacks above the tabs, so it waits (`body[data-rail="wait"]`, `setRail` in
+`main.ts`) until the first Generate or "Choose first". The page then opens on
+the tabs. A party link opened with no book stays in
 the address until the book is read. Forget book goes back to the first state.
 
 - `web/cloud.ts` keeps saves on a server, only in a build that names one:

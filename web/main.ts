@@ -190,11 +190,31 @@ function accountLine(): HTMLElement | null {
   );
 }
 
+/**
+ * Whether the rail shows on a narrow screen, where it stacks above the tabs:
+ * "wait" until the first character is generated (or the user asks to choose
+ * first), so the page opens on the tabs and the next step. A wide screen
+ * always shows it beside the sheet.
+ */
+function setRail(state: "wait" | "open"): void {
+  document.body.dataset.rail = state;
+}
+
 /** With a book and no character on the sheet: the next step. */
 function renderReady(): void {
   const make = h("button", { type: "button", class: "btn" }, "Generate a character");
   (make as HTMLButtonElement).disabled = reading;
   make.addEventListener("click", () => generateBtn.click());
+  // Only a narrow screen, where the rail waits, shows this (app.css).
+  const choose = h(
+    "button",
+    { type: "button", class: "btn ghost welcome__choose" },
+    "Choose first",
+  );
+  choose.addEventListener("click", () => {
+    setRail("open");
+    document.querySelector(".rail")?.scrollIntoView({ block: "start" });
+  });
   const open =
     partySize > 0 ? h("button", { type: "button", class: "btn ghost" }, "Open the party") : null;
   open?.addEventListener("click", () => showTab("party"));
@@ -210,7 +230,7 @@ function renderReady(): void {
         { class: "sub" },
         "Choose a kindred, a class and a name, or let the dice choose. Then generate.",
       ),
-      h("div", { class: "welcome__go" }, make, open),
+      h("div", { class: "welcome__go" }, make, choose, open),
     ),
   );
 }
@@ -289,6 +309,7 @@ async function load(file: File): Promise<void> {
   addPartyBtn.hidden = true;
   lastMarkdown = "";
   lastCharacter = null;
+  setRail("wait");
   shop.show(null, []);
   pick.disabled = true;
   reading = true;
@@ -358,6 +379,7 @@ forgetBtn.addEventListener("click", () => {
   placeBookPanel(false);
   // The sheet on show came from the book, so it goes too.
   lastCharacter = null;
+  setRail("wait");
   shop.show(null, []);
   lastMarkdown = "";
   printBtn.hidden = true;
@@ -533,6 +555,7 @@ const shop = mountShop($("shop"), (c) => {
 // ── generate & download ────────────────────────────────────────────────────
 generateBtn.addEventListener("click", () => {
   if (!book) return;
+  setRail("open");
   const { kindreds, classes } = book;
   const rolled = rollKindredClass(kindreds, classes, {
     kindred: kindreds.find((k) => k.id === kindredSel.value),
