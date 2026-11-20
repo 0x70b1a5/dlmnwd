@@ -31,6 +31,7 @@ import { mountTable } from "./table.ts";
 import { download, safeName } from "./party-store.ts";
 import { h, renderSheet } from "./sheet.ts";
 import { mountShop } from "./shop.ts";
+import { shopCatalog } from "../src/party/inventory.ts";
 import { chooseParty } from "./conflict.ts";
 import { kindredClass } from "../src/party/render.ts";
 import {
@@ -561,7 +562,7 @@ generateBtn.addEventListener("click", () => {
   lastName = character.name;
   lastCharacter = character;
   renderSheet(sheet, character);
-  shop.show(character, bookRules(book).catalog);
+  shop.show(character, shopCatalog(bookRules(book)));
   showTab("sheet");
   printBtn.hidden = false;
   downloadBtn.hidden = false;

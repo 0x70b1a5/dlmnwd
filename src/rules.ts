@@ -131,6 +131,10 @@ export const SLOT_COST = {
   ammoStack: 20,
 };
 
+/** B/X animal loads: an animal carries its listed load at its normal Speed,
+ *  and this many times that load at half Speed. A vehicle's cargo is its limit. */
+export const ANIMAL_LOAD = { halfSpeedTimes: 2 };
+
 /** B/X prime-requisite XP adjustments, used when the book's table is unread. */
 export const DEFAULT_PRIME_XP = [
   { min: 3, max: 5, percent: -20 },

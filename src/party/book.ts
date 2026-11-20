@@ -6,6 +6,7 @@ import { parseGlamoursTable } from "../parse/glamour.ts";
 import type { ParsedKindred } from "../parse/kindred.ts";
 import { parseKnacksTable } from "../parse/knack.ts";
 import { parseRunes } from "../parse/rune.ts";
+import { parseTransport } from "../parse/transport.ts";
 import { kindredXpBonus, kindredXpBonuses, parsePrimeXpModifiers } from "../parse/xp.ts";
 
 /** The lookups party management needs, keyed by their index names. */
@@ -22,5 +23,6 @@ export function partyLookups(pages: string[], kindreds: ParsedKindred[]): Record
     kindred_xp: kindredXp,
     glamours: parseGlamoursTable(pages),
     knacks: parseKnacksTable(pages),
+    transport: parseTransport(pages),
   };
 }

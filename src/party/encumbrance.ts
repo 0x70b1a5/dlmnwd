@@ -3,6 +3,7 @@
 
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import { abilityMod } from "../rules.ts";
+import { containerFill, stowsGear } from "./inventory.ts";
 import { type Coins, type EncMethod, itemSlots, type PC } from "./model.ts";
 
 export interface Load {
@@ -27,9 +28,10 @@ export function coinCount(c: Coins): number {
   return c.cp + c.sp + c.gp + c.pp;
 }
 
-/** The items the character has on them: all but the stashed ones. */
+/** The items the character has on them: equipped and stowed, not those on an
+ *  animal or vehicle or stashed. */
 export function carriedItems(pc: PC): PC["items"] {
-  return pc.items.filter((i) => i.where !== "stashed");
+  return pc.items.filter((i) => i.where === "equipped" || i.where === "stowed");
 }
 
 export function itemsWeight(pc: PC): number {
@@ -58,9 +60,7 @@ export function computeLoad(
     pc.items.filter((i) => i.where === "stowed").reduce((s, i) => s + itemSlots(i), 0) + coinSlots;
   // A stashed sack holds nothing the character carries.
   const holders = carriedItems(pc)
-    .filter((i) =>
-      enc.stowContainers.some((w) => new RegExp(`^${w}s?\\b`, "i").test(i.ref ?? i.name)),
-    )
+    .filter((i) => stowsGear(enc, i))
     .reduce((n, i) => n + i.qty, 0);
   const maxStowed = enc.slots.at(-1)?.stowed ?? 0;
   const stowedCapacity = Math.min(holders * enc.slotsPerContainer, maxStowed || Infinity);
@@ -73,6 +73,15 @@ export function computeLoad(
     stowedCapacity,
     problems,
   };
+
+  // A container holding more than the book says it holds.
+  for (const i of carriedItems(pc)) {
+    const fill = containerFill(pc, i, method, enc, catalog);
+    if (fill && fill.used > fill.capacity)
+      problems.push(
+        `${i.name} holds ${fill.capacity} ${fill.unit}; ${fill.used} ${fill.unit} are in it`,
+      );
+  }
 
   if (method === "slots") {
     if (enc.slots.length === 0) {

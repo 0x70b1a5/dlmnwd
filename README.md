@@ -172,7 +172,12 @@ dw pc pip item add rope         # looked up in the book's equipment lists
 dw pc pip item add torches 2    # -e/--equipped, -s/--stowed, --stashed, --weight=N, --slots=N
 dw pc pip item rm rations 1
 dw pc pip stow longbow          # / equip
-dw pc pip stash tent            # left at camp: listed, but no weight or slots
+dw pc pip stash tent --at=camp  # left behind: listed, but no weight or slots
+dw pc pip put rope in backpack  # it goes where the backpack goes
+dw pc pip buy lantern           # at the book's price, change given (--banked: from the bank)
+dw pc pip buy "<animal>"        # the book's animals and vehicles too (animal add: no payment)
+dw pc pip put tent on <animal>  # counts toward its load, not Pip's
+dw pc pip animal                # each animal and vehicle: its load and Speed
 dw pc pip coins +120gp -5sp
 dw pc pip bank 1700gp           # banked coins don't weigh anything (withdraw: back)
 dw pc pip hp -3                 # +N, =N, max
@@ -195,7 +200,13 @@ dw pc pip sheet --out=PCs/Pip.md  # a vault Markdown sheet
 
 Every load check prints the current Speed, says when it changed, and flags a
 broken limit: carrying more than the maximum, too many equipped or stowed slots,
-no backpack or sack, or a bulky item packed away. Importing a sheet reports any
+no backpack or sack, a bulky item packed away, or a container holding more than
+the book says it holds.
+
+The animals and vehicles come from the tables in your book with a Load or Cargo
+column. An animal carries its load at its Speed, and twice that at half Speed.
+A vehicle carries its cargo and no more. Taking an animal off the list stashes
+what was on it, under its name. Importing a sheet reports any
 weight that disagrees with the book and any item the book doesn't list. Set the
 right weight with `dw pc <name> item set "<item>" weight=N`.
 
@@ -219,7 +230,11 @@ reads one back. Import also takes filled-in fillable character sheets, like
 `dw party import`; the sheets are read in the browser and go nowhere. Copy link (under More)
 gives a link that opens the party in another browser. The party is in the link
 itself, after the `#`, so no server gets it. The link is a copy: it does not
-follow later changes. The selected member shows
+follow later changes. The gear is listed by where it is: equipped, stowed, on each animal or
+vehicle, and stashed. Drag a row by its grip to reorder it, drop it on a
+container to put it inside, or drop it on a heading to move it there. The
+select on each row does the same. Coins can be added, spent, banked and
+withdrawn, and Buy pays the book's price. The selected member shows
 with the most used parts first. A strip with the name, HP, AC, attack, speed and
 saves stays in view while you scroll. Below it are the abilities, XP and gold,
 then spells, glamours, knacks and runes, then gear, coins and notes. Each

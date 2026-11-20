@@ -16,11 +16,45 @@ import {
   findRune,
   forgetName,
   gainsRunesOnLevel,
+  coinsFor,
   learnName,
   type NameList,
   newDay,
   setField,
+  shiftCoins,
+  worthCp,
 } from "../src/party/actions.ts";
+import {
+  addCarrier,
+  amountText,
+  type At,
+  buyCarrier,
+  buyItem,
+  carrierLoad,
+  carrierText,
+  coinsLine,
+  containerFill,
+  contents,
+  type Dest,
+  destOf,
+  groupKey,
+  holderOf,
+  holdersFor,
+  itemById,
+  keptText,
+  keyText,
+  moveItem,
+  type PlaceGroup,
+  placeGroups,
+  placeKey,
+  placeText,
+  type Purse,
+  removeCarrier,
+  type Row,
+  within,
+} from "../src/party/inventory.ts";
+import { priceOf, priceText } from "../src/gen/shop.ts";
+import type { Transport } from "../src/parse/transport.ts";
 import {
   castSpell,
   learnsSpells,
@@ -29,25 +63,26 @@ import {
   slotUse,
   traditionSpells,
 } from "../src/party/spells.ts";
-import { computeAc, describeLoad } from "../src/party/encumbrance.ts";
+import { coinCount, computeAc, describeLoad } from "../src/party/encumbrance.ts";
 import { characterToPc } from "../src/party/from-character.ts";
 import { type ImportResult, pcFromSheet } from "../src/party/import.ts";
 import { readFormFields } from "../src/pdf/fields.ts";
-import { addItem, makeItem, removeItem } from "../src/party/items.ts";
+import { addItem, dropEntry, makeItem, removeItem, resolveItem } from "../src/party/items.ts";
 import {
   COIN_KINDS,
+  type Coins,
+  emptyCoins,
   ENC_METHODS,
   type EncMethod,
   freshParty,
   normalizeParty,
   stampChanged,
+  tidyInventory,
   type InvItem,
   type Party,
   type PC,
-  type Where,
-  WHERES,
 } from "../src/party/model.ts";
-import { formatCoins, kindredClass, loadOf, pcMarkdown } from "../src/party/render.ts";
+import { kindredClass, loadOf, pcMarkdown } from "../src/party/render.ts";
 import { classOf, emptyRules, type PartyRules } from "../src/party/rules.ts";
 import { grantRune, lookupRune, rollRuneGrant, runeStatus, useRune } from "../src/party/runes.ts";
 import {
@@ -66,7 +101,7 @@ import {
   safeName,
   storeParty,
 } from "./party-store.ts";
-import { abilityMod } from "../src/rules.ts";
+import { abilityMod, ANIMAL_LOAD } from "../src/rules.ts";
 import {
   castingEntry,
   h,
@@ -156,6 +191,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const wasSelected = selected;
     try {
       const said = change();
+      // Every item and animal keeps an id, whatever made it.
+      for (const m of party.members) tidyInventory(m);
       if (!quiet) stampChanged(JSON.parse(before), party, Date.now());
       const note = typeof said === "string" ? { text: said, kind: "info" as const } : said;
       history.push({
@@ -190,6 +227,12 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   }
 
   function render(): void {
+    // Not under a drag in progress: the rows it measured would move.
+    if (drag?.on) {
+      drawLater = true;
+      return;
+    }
+    drawLater = false;
     if (selected >= party.members.length) selected = party.members.length - 1;
     onCount(party.members.length);
     const pc = party.members[selected];
@@ -632,6 +675,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           quickRow(pc),
           ...castBlocks(pc, data),
           block("Gear", gearBlock(pc)),
+          pc.carriers.length || rules.transport.length
+            ? block("Animals and vehicles", carrierBlock(pc))
+            : null,
           block("Coins", coinBlock(pc)),
           block("Notes", notesBlock(pc)),
         ),
@@ -1196,88 +1242,57 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     return parts.join(" · ");
   }
 
+  /** The member's gear by place: equipped, stowed, on each animal or vehicle,
+   *  stashed. A row drags by its grip: onto a heading to move it there,
+   *  between two rows to put it there, onto an item to put it inside. */
   function gearBlock(pc: PC): HTMLElement {
     const load = loadOf(pc, party, rules);
     // Only the number the party's encumbrance method counts gets a column.
     const measure: "weight" | "slots" | null =
       party.encumbrance === "weight" ? "weight" : party.encumbrance === "slots" ? "slots" : null;
-    const rows = pc.items.map((it) =>
-      h(
-        "tr",
-        {},
+    const cols = measure ? 5 : 4;
+    const body: HTMLElement[] = [];
+    for (const g of placeGroups(pc)) {
+      const shown = g.rows.length > 0 || !!g.carrier;
+      body.push(
         h(
-          "td",
-          {},
-          it.name,
-          it.note ? h("span", { class: "muted" }, ` (${it.note})`) : null,
-          it.treasure ? h("span", { class: "tag" }, "treasure") : null,
-          it.bulky ? h("span", { class: "tag" }, "bulky") : null,
-          it.ref && it.ref !== it.name ? h("span", { class: "muted" }, ` = ${it.ref}`) : null,
+          "tr",
+          {
+            class: `grp${shown ? "" : " empty"}${g.carrier ? " carrier" : ""}`,
+            "data-drop": g.key,
+          },
+          h("td", { colspan: `${cols}` }, ...groupHead(pc, g, load)),
         ),
-        h("td", { class: "num" }, itemNum(pc, it, "qty", 0)),
-        measure ? h("td", { class: "num" }, itemNum(pc, it, measure, 0)) : null,
-        h("td", {}, whereSelect(pc, it)),
-        h(
-          "td",
-          { class: "num" },
-          button(
-            "-1",
-            () => act(() => (removeItem(pc, it, 1), `${pc.name} -1 ${it.name}`)),
-            "btn mini",
-            "button",
-            `Remove one ${it.name}`,
-          ),
-          button(
-            "x",
-            () => act(() => (removeItem(pc, it), `${pc.name} drops ${it.name}`)),
-            "btn mini",
-            "button",
-            `Remove all ${it.name}`,
-          ),
-        ),
-      ),
-    );
-
-    const listId = "catalog-items";
-    const name = h("input", {
-      type: "text",
-      list: listId,
-      placeholder: rules.catalog.length ? "item, from the book's lists" : "item",
-      "aria-label": "Item to add",
-    }) as HTMLInputElement;
-    const qty = numInput("", { min: "1", placeholder: "qty", "aria-label": "Quantity" });
-    const where = select([["", "auto"], ...WHERES.map((w): [string, string] => [w, w])], "");
-    where.setAttribute("aria-label", "Where it goes");
-    const names = [...new Set(rules.catalog.map((c) => c.name))];
-    const addForm = form(
-      () =>
-        act(() => {
-          const text = name.value.trim();
-          if (!text) throw new Error("Name the item to add.");
-          const { inv, resolved } = makeItem(rules.catalog, rules.enc, text, {
-            qty: qty.value ? parseInt(qty.value, 10) : undefined,
-            where: (where.value || undefined) as Where | undefined,
-          });
-          const stacked = addItem(pc, inv);
-          const found = resolved.item
-            ? `${resolved.item.name}: ${inv.weight} coins${inv.qty > 1 ? " each" : ""}, ${plural(inv.slots, "slot")}`
-            : `not in the book's lists: weight ${inv.weight}, set it in the table`;
-          return `${pc.name} +${inv.qty} ${inv.name} → ${inv.where} [${found}]${stacked.qty !== inv.qty ? ` (now ×${stacked.qty})` : ""}`;
-        }),
-      name,
-      qty,
-      where,
-      button("Add", null, "btn", "submit"),
-      h("datalist", { id: listId }, ...names.map((n) => h("option", { value: n }))),
-    );
-    addForm.classList.add("add-item");
+      );
+      // After a container's contents, a strip to drop into it at the end
+      // (shown while dragging).
+      const boxes: Row[] = [];
+      const close = (depth: number): void => {
+        while (boxes.length && boxes[boxes.length - 1].depth >= depth) {
+          const box = boxes.pop()!;
+          body.push(
+            h(
+              "tr",
+              { class: "cend", "data-into": box.item.id!, style: `--depth:${box.depth + 1}` },
+              h("td", { colspan: `${cols}` }, h("span", {}, `into ${box.item.name}, at the end`)),
+            ),
+          );
+        }
+      };
+      for (const r of g.rows) {
+        close(r.depth);
+        body.push(itemRow(pc, r, measure));
+        if (contents(pc, r.item).length) boxes.push(r);
+      }
+      close(0);
+    }
 
     return h(
       "div",
       { class: "stack" },
       h("p", { class: "load-line" }, describeLoad(load)),
       ...load.problems.map((p) => h("p", { class: "status", "data-kind": "error" }, p)),
-      pc.items.length
+      pc.items.length || pc.carriers.length
         ? h(
             "div",
             { class: "table-scroll" },
@@ -1299,39 +1314,351 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
                   h("th", { class: "num" }, ""),
                 ),
               ),
-              h("tbody", {}, ...rows),
+              h("tbody", {}, ...body),
             ),
           )
         : h("p", { class: "hint" }, "Carrying nothing."),
-      addForm,
+      addItemForm(pc),
       h(
         "p",
         { class: "hint" },
-        measure
-          ? `${measure === "weight" ? "Coins" : "Slots"} are per item. Stashed items stay behind and count for nothing.`
-          : "Stashed items stay behind and count for nothing.",
+        measure ? `${measure === "weight" ? "Coins" : "Slots"} are per item. ` : "",
+        "Drag a row by ⠿: onto a heading, between two rows, or onto an item to put it inside. ",
+        "Stashed items stay behind and count for nothing.",
       ),
     );
   }
 
-  /** Where an item is: equipped, stowed, or stashed (left behind). */
+  /** A place's heading: its name, and its load where the method counts one. */
+  function groupHead(
+    pc: PC,
+    g: PlaceGroup,
+    load: ReturnType<typeof loadOf>,
+  ): (HTMLElement | string | null)[] {
+    const slots = party.encumbrance === "slots";
+    const weight = ` · ${amountText(
+      g.rows.reduce((n, r) => n + r.item.qty * r.item.weight, 0),
+      "coins",
+    )}`;
+    const empty = g.rows.length ? null : sub(" · drop here");
+    if (g.carrier) {
+      const c = g.carrier;
+      const l = carrierLoad(pc, c, party.encumbrance, rules.enc);
+      const of = `${l.used.toLocaleString("en")} of ${amountText(l.capacity, l.unit)}`;
+      const said =
+        l.state === "normal"
+          ? of
+          : l.state === "slow"
+            ? `${of}: half Speed (most ${l.most.toLocaleString("en")})`
+            : `${amountText(l.used, l.unit)}: over the most it carries, ${l.most.toLocaleString("en")}`;
+      return [
+        `On ${c.name}`,
+        c.name !== c.type ? sub(` ${c.type}`) : null,
+        sub(` · ${said}`, `load ${l.state}`),
+        l.speed !== undefined ? sub(` · Speed ${l.speed}`) : null,
+        g.rows.length ? null : sub(" · nothing on it"),
+      ];
+    }
+    if (g.where === "equipped") {
+      const max = rules.enc.slots.at(-1)?.equipped;
+      return [
+        "Equipped",
+        slots && max ? sub(` · ${load.equippedSlots} of ${max} slots`) : slots ? null : sub(weight),
+        empty,
+      ];
+    }
+    if (g.where === "stowed")
+      return [
+        "Stowed",
+        slots
+          ? sub(` · ${load.stowedSlots} of ${load.stowedCapacity} slots, coins too`)
+          : sub(weight),
+        empty,
+      ];
+    return ["Stashed", g.kept ? sub(` ${keptText(g.kept)}`) : null, sub(" · not carried"), empty];
+  }
+
+  function itemRow(pc: PC, r: Row, measure: "weight" | "slots" | null): HTMLElement {
+    const it = r.item;
+    const fill = containerFill(pc, it, party.encumbrance, rules.enc, rules.catalog);
+    const grip = h(
+      "span",
+      {
+        class: "grip",
+        "data-grip": it.id!,
+        title: "Drag onto a heading, between two rows, or onto an item to put it inside",
+        "aria-hidden": "true",
+      },
+      "⠿",
+    );
+    const id = it.id!;
+    on(grip, "pointerdown", (e) => startDrag(e as PointerEvent, id));
+    const off = it.where === "stashed" || it.where === "loaded";
+    return h(
+      "tr",
+      { "data-item": id, ...(off ? { class: "off" } : {}) },
+      h(
+        "td",
+        { class: "item", style: `--depth:${r.depth}` },
+        h(
+          "div",
+          { class: "iline" },
+          grip,
+          h(
+            "span",
+            { class: "iname" },
+            it.name,
+            it.note ? h("span", { class: "muted" }, ` (${it.note})`) : null,
+            it.treasure ? h("span", { class: "tag" }, "treasure") : null,
+            it.bulky ? h("span", { class: "tag" }, "bulky") : null,
+            it.ref && it.ref !== it.name ? h("span", { class: "muted" }, ` = ${it.ref}`) : null,
+          ),
+        ),
+        fill
+          ? h(
+              "span",
+              { class: `fill${fill.used > fill.capacity ? " over" : ""}` },
+              `${fill.used.toLocaleString("en")} of ${amountText(fill.capacity, fill.unit)} in it`,
+            )
+          : null,
+      ),
+      h("td", { class: "num" }, itemNum(pc, it, "qty", 0)),
+      measure ? h("td", { class: "num" }, itemNum(pc, it, measure, 0)) : null,
+      h(
+        "td",
+        { class: "place" },
+        whereSelect(pc, it),
+        it.where === "stashed" && !it.in ? keptInput(pc, it) : null,
+      ),
+      h(
+        "td",
+        { class: "num" },
+        button(
+          "-1",
+          () => act(() => (removeItem(pc, it, 1), `${pc.name} -1 ${it.name}`)),
+          "btn mini",
+          "button",
+          `Remove one ${it.name}`,
+        ),
+        button(
+          "x",
+          () => act(() => (removeItem(pc, it), `${pc.name} drops ${it.name}`)),
+          "btn mini",
+          "button",
+          `Remove all ${it.name}`,
+        ),
+      ),
+    );
+  }
+
+  /** The places an item can be: on the character, on each animal or vehicle,
+   *  stashed, or inside one of the containers. */
+  function placeOptions(pc: PC, it: InvItem | null): [string, string][] {
+    const boxes = holdersFor(pc, it, rules.catalog);
+    const count = (n: string): number => boxes.filter((b) => b.name === n).length;
+    return [
+      ["equipped", "equipped"],
+      ["stowed", "stowed"],
+      ...pc.carriers.map((c): [string, string] => [`on:${c.id}`, `on ${c.name}`]),
+      ["stashed", "stashed"],
+      ...boxes.map((b): [string, string] => [
+        `in:${b.id}`,
+        `in ${b.name}${count(b.name) > 1 ? ` (${placeText(pc, b)})` : ""}`,
+      ]),
+    ];
+  }
+
+  /** Where an item is. Choosing a place takes it out of any container. */
   function whereSelect(pc: PC, it: InvItem): HTMLSelectElement {
-    const el = select(
-      WHERES.map((w): [string, string] => [w, w]),
-      it.where,
-      (v) =>
-        act(() => {
-          const to = v as Where;
-          if (to === "stowed" && it.bulky)
-            throw new Error(`${it.name} is bulky: it takes two hands and can't be stowed.`);
-          it.where = to;
-          return `${pc.name}: ${it.name} → ${to}`;
-        }),
+    const el = select(placeOptions(pc, it), placeKey(it), (v) =>
+      act(() => `${pc.name}: ${moveItem(pc, it, destOf(v), rules.enc)}`),
     );
     el.setAttribute("aria-label", `Where ${it.name} is`);
     el.classList.add("where");
     if (it.where === "stashed") el.dataset.stashed = "";
     return el;
+  }
+
+  /** Where a stashed item is kept: the items stashed at one place are listed together. */
+  function keptInput(pc: PC, it: InvItem): HTMLInputElement {
+    const el = textInput(it.kept ?? "", (v) =>
+      act(() => {
+        const kept = v.trim();
+        return `${pc.name}: ${moveItem(pc, it, kept ? { where: "stashed", kept } : { where: "stashed" }, rules.enc)}`;
+      }),
+    );
+    el.placeholder = "where? (at the inn)";
+    el.setAttribute("aria-label", `Where ${it.name} is kept`);
+    el.classList.add("kept");
+    return el;
+  }
+
+  /** Add an item (found, given, already owned) or buy it at the book's price. */
+  function addItemForm(pc: PC): HTMLElement {
+    const listId = "catalog-items";
+    const name = h("input", {
+      type: "text",
+      list: listId,
+      placeholder: rules.catalog.length ? "item, from the book's lists" : "item",
+      "aria-label": "Item to add",
+    }) as HTMLInputElement;
+    const qty = numInput("", { min: "1", placeholder: "qty", "aria-label": "Quantity" });
+    const where = select([["", "auto"], ...placeOptions(pc, null)], "");
+    where.setAttribute("aria-label", "Where it goes");
+    const purse = purseSelect(pc);
+    const names = [
+      ...new Set([...rules.catalog.map((c) => c.name), ...rules.transport.map((t) => t.name)]),
+    ];
+    const add = (buying: boolean): void =>
+      act(() => {
+        const text = name.value.trim();
+        if (!text) throw new Error("Name the item to add.");
+        const n = qty.value ? parseInt(qty.value, 10) : undefined;
+        const to = where.value ? destOf(where.value) : undefined;
+        const from = (purse?.value as Purse | undefined) ?? "coins";
+        // An animal or vehicle named here joins the list of them.
+        const t = rules.transport.find((x) => x.name.toLowerCase() === text.toLowerCase());
+        if (t && !resolveItem(rules.catalog, text).item) {
+          if (buying) return buyCarrier(pc, t, { purse: from }).line;
+          return `${pc.name} +${carrierText(addCarrier(pc, t))}`;
+        }
+        if (buying) return buyItem(pc, rules, text, { qty: n, to, purse: from }).line;
+        const { inv, resolved } = makeItem(rules.catalog, rules.enc, text, { qty: n });
+        if (to) moveItem(pc, inv, to, rules.enc);
+        const stacked = addItem(pc, inv);
+        const found = resolved.item
+          ? `${resolved.item.name}: ${inv.weight} coins${inv.qty > 1 ? " each" : ""}, ${plural(inv.slots, "slot")}`
+          : `not in the book's lists: weight ${inv.weight}, set it in the table`;
+        return `${pc.name} +${inv.qty} ${inv.name} → ${placeText(pc, stacked)} [${found}]${stacked.qty !== inv.qty ? ` (now ×${stacked.qty})` : ""}`;
+      });
+    const f = form(
+      () => add(false),
+      name,
+      qty,
+      where,
+      button("Add", null, "btn", "submit"),
+      button("Buy", () => add(true), "btn ghost", "button", "Buy it at the book's price"),
+      purse,
+      h("datalist", { id: listId }, ...names.map((n) => h("option", { value: n }))),
+    );
+    f.classList.add("add-item");
+    return f;
+  }
+
+  /** The member's animals and vehicles, and buying or adding one from the book's list. */
+  function carrierBlock(pc: PC): HTMLElement {
+    const rows = pc.carriers.map((c) => {
+      const t = rules.transport.find((x) => x.name === c.type);
+      const l = carrierLoad(pc, c, party.encumbrance, rules.enc);
+      const facts = [
+        c.name !== c.type ? c.type : "",
+        t?.type && t.type !== c.type ? t.type : "",
+        t?.ac ? `AC ${t.ac}` : "",
+        t?.hp ? `HP ${t.hp}` : "",
+        c.speed !== undefined ? `Speed ${c.speed}` : "",
+        ...Object.entries(t?.more ?? {}).map(([k, v]) => `${k}: ${v}`),
+      ].filter(Boolean);
+      const rename = textInput(c.name, (v) =>
+        act(() => {
+          const was = c.name;
+          c.name = v.trim() || c.type;
+          return `${pc.name}: ${was} is now ${c.name}`;
+        }),
+      );
+      rename.setAttribute("aria-label", `Name of ${c.name}`);
+      return h(
+        "li",
+        { class: "carrier" },
+        rename,
+        h("span", { class: "facts" }, facts.join(" · ")),
+        h(
+          "label",
+          { class: "carries" },
+          "carries ",
+          numInput(
+            `${c.load}`,
+            { min: "0", class: "cell", "aria-label": `Coins ${c.name} carries` },
+            (v) => act(() => void (c.load = Math.max(0, v))),
+          ),
+          c.kind === "animal"
+            ? ` coins at its Speed, ${(c.load * ANIMAL_LOAD.halfSpeedTimes).toLocaleString("en")} at half`
+            : " coins",
+        ),
+        l.state !== "normal"
+          ? h("span", { class: `load ${l.state}` }, l.state === "slow" ? "half Speed" : "over")
+          : null,
+        button(
+          "Remove",
+          () => act(() => removeCarrier(pc, c)),
+          "btn mini",
+          "button",
+          `Remove ${c.name}`,
+        ),
+      );
+    });
+    const list = rules.transport;
+    const sections = [...new Set(list.map((t) => t.section))];
+    const pick = h(
+      "select",
+      { "aria-label": "Animal or vehicle" },
+      ...sections.map((s) =>
+        h(
+          "optgroup",
+          { label: titleCase(s) || "Animals and vehicles" },
+          ...list
+            .filter((t) => t.section === s)
+            .map((t) =>
+              h(
+                "option",
+                { value: t.name },
+                `${t.name} — ${transportPrice(t)}, carries ${t.load.toLocaleString("en")}`,
+              ),
+            ),
+        ),
+      ),
+    ) as HTMLSelectElement;
+    const named = h("input", {
+      type: "text",
+      placeholder: "name (optional)",
+      "aria-label": "Its name",
+    }) as HTMLInputElement;
+    const purse = purseSelect(pc);
+    const get = (buying: boolean): void =>
+      act(() => {
+        const t = list.find((x) => x.name === pick.value);
+        if (!t) throw new Error("Choose an animal or vehicle.");
+        const name = named.value.trim() || undefined;
+        if (buying)
+          return buyCarrier(pc, t, { name, purse: (purse?.value as Purse) ?? "coins" }).line;
+        const c = addCarrier(pc, t, name);
+        return `${pc.name} +${carrierText(c)}, not paid for`;
+      });
+    const f = list.length
+      ? form(
+          () => get(true),
+          pick,
+          named,
+          button("Buy", null, "btn", "submit"),
+          button("Add", () => get(false), "btn ghost", "button", "Add it without paying"),
+          purse,
+        )
+      : null;
+    f?.classList.add("add-carrier");
+    return h(
+      "div",
+      { class: "stack" },
+      rows.length
+        ? h("ul", { class: "carriers" }, ...rows)
+        : h("p", { class: "hint" }, "No animals or vehicles."),
+      f,
+      h(
+        "p",
+        { class: "hint" },
+        list.length
+          ? "Each one is a place in the gear above: what is on it counts toward its load, not the character's."
+          : "The saved book has no list of animals or vehicles. Load the PDF again.",
+      ),
+    );
   }
 
   /** An editable number cell for one item field. A quantity of 0 drops the item. */
@@ -1348,12 +1675,161 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         act(() => {
           it[field] = Math.max(min, v);
           if (field === "qty" && it.qty <= 0) {
-            pc.items = pc.items.filter((i) => i !== it);
+            dropEntry(pc, it);
             return `${pc.name} drops ${it.name}`;
           }
         }),
     );
   }
+
+  // The drag in progress, and whether a draw waits for it to end.
+  let drag: Drag | null = null;
+  let drawLater = false;
+
+  function startDrag(e: PointerEvent, id: string): void {
+    const pc = party.members[selected];
+    const it = pc && itemById(pc, id);
+    if (!it || e.button > 0) return;
+    e.preventDefault();
+    const grip = e.currentTarget as HTMLElement;
+    const shown = placeGroups(pc).flatMap((g) =>
+      g.rows.map((r) => ({ id: r.item.id!, depth: r.depth })),
+    );
+    drag = {
+      id,
+      member: selected,
+      x: e.clientX,
+      y: e.clientY,
+      on: false,
+      below: new Set([...within(pc, it)].map((i) => i.id!)),
+      shown,
+      pos: new Map(shown.map((r, k) => [r.id, k])),
+      target: null,
+      row: grip.closest("tr"),
+      table: grip.closest("table"),
+    };
+  }
+
+  /** The drop under the pointer: a heading, the strip at a container's end,
+   *  the gap above or below a row, or the middle of a row (into that item). */
+  function dropAt(d: Drag, x: number, y: number): Drop | null {
+    const pc = party.members[d.member];
+    const it = pc && itemById(pc, d.id);
+    const el = document
+      .elementFromPoint(x, y)
+      ?.closest<HTMLElement>("tr[data-item], tr[data-drop], tr[data-into]");
+    if (!it || !el || !root.contains(el)) return null;
+    const { drop, into } = el.dataset;
+    if (drop) {
+      if (!it.in && groupKey(it) === drop) return null;
+      return { el, kind: "on", to: destOf(drop), label: keyText(pc, drop) };
+    }
+    if (into) {
+      const box = itemById(pc, into);
+      if (!box || d.below.has(into)) return null;
+      return { el, kind: "on", to: { in: into }, at: { last: true }, label: `in ${box.name}` };
+    }
+    const target = itemById(pc, el.dataset.item);
+    const k = d.pos.get(el.dataset.item ?? "");
+    if (!target || k === undefined) return null;
+    const r = el.getBoundingClientRect();
+    const edge = Math.max(6, Math.min(12, r.height * 0.28));
+    if (y < r.top + edge || y > r.bottom - edge) {
+      let ref = d.shown[k];
+      let after = y > r.bottom - edge;
+      const next = d.shown[k + 1];
+      // Below a container whose contents follow: first inside it.
+      if (after && next && next.depth > ref.depth) {
+        ref = next;
+        after = false;
+      }
+      if (d.below.has(ref.id)) return null;
+      const o = itemById(pc, ref.id)!;
+      const box = holderOf(pc, o);
+      const key = box ? `in:${box.id}` : groupKey(o);
+      return {
+        el,
+        kind: after ? "gap-bottom" : "gap-top",
+        depth: ref.depth,
+        to: destOf(key),
+        at: after ? { after: o.id } : { before: o.id },
+        label: keyText(pc, key),
+      };
+    }
+    if (d.below.has(target.id!) || it.in === target.id) return null;
+    return {
+      el,
+      kind: "on",
+      to: { in: target.id! },
+      at: { last: true },
+      label: `in ${target.name}`,
+    };
+  }
+
+  function moveDrag(e: PointerEvent): void {
+    const d = drag;
+    if (!d) return;
+    const pc = party.members[d.member];
+    const name = (pc && itemById(pc, d.id)?.name) ?? "";
+    if (!d.on) {
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return;
+      d.on = true;
+      d.ghost = h("div", { class: "drag-ghost" }, name);
+      document.body.append(d.ghost);
+      document.body.classList.add("dragging");
+      d.table?.classList.add("dragging");
+      d.row?.classList.add("drag-src");
+    }
+    d.ghost!.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 10}px)`;
+    const t = dropAt(d, e.clientX, e.clientY);
+    if (t?.el !== d.target?.el || t?.kind !== d.target?.kind || t?.depth !== d.target?.depth) {
+      markDrop(d.target, false);
+      markDrop(t, true);
+      d.ghost!.textContent = name + (t ? ` → ${t.label}` : "");
+    }
+    d.target = t;
+    d.ghost!.classList.toggle("none", !t);
+    // Near the top or bottom of the window, scroll (a long list on a phone).
+    if (e.clientY < 60) scrollBy(0, -14);
+    else if (e.clientY > innerHeight - 60) scrollBy(0, 14);
+  }
+
+  function endDrag(dropped: boolean): void {
+    const d = drag;
+    if (!d) return;
+    drag = null;
+    d.ghost?.remove();
+    document.body.classList.remove("dragging");
+    markDrop(d.target, false);
+    d.table?.classList.remove("dragging");
+    d.row?.classList.remove("drag-src");
+    const t = d.target;
+    if (dropped && d.on && t)
+      act(() => {
+        const pc = party.members[d.member];
+        const it = pc && itemById(pc, d.id);
+        if (!it) throw new Error("That item is gone from the list.");
+        const ref = (id: string | undefined): InvItem | undefined => itemById(pc, id);
+        const at: At | undefined = !t.at
+          ? undefined
+          : t.at.last
+            ? { last: true }
+            : t.at.before && ref(t.at.before)
+              ? { before: ref(t.at.before)! }
+              : t.at.after && ref(t.at.after)
+                ? { after: ref(t.at.after)! }
+                : undefined;
+        return `${pc.name}: ${moveItem(pc, it, t.to, rules.enc, at)}`;
+      });
+    else if (drawLater) render();
+  }
+
+  document.addEventListener("pointermove", (e) => moveDrag(e));
+  document.addEventListener("pointerup", () => endDrag(true));
+  document.addEventListener("pointercancel", () => endDrag(false));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && drag) endDrag(false);
+  });
 
   function coinBlock(pc: PC): HTMLElement {
     const row = (label: string, purse: PC["coins"]) =>
@@ -1373,6 +1849,39 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           ),
         ),
       );
+    // Fields for coins to add, take away, bank or withdraw.
+    const amounts = COIN_KINDS.map((k) =>
+      numInput("", {
+        min: "0",
+        class: "cell",
+        placeholder: k,
+        "aria-label": `${k} to add or move`,
+      }),
+    );
+    const read = (): Coins => {
+      const c = emptyCoins();
+      COIN_KINDS.forEach((k, i) => {
+        const v = amounts[i].value.trim();
+        c[k] = v === "" ? 0 : Number(v);
+      });
+      return c;
+    };
+    const shift = (from: Purse | null, to: Purse | null, verb: string) => () =>
+      act(() => {
+        const n = shiftCoins(
+          read(),
+          from ? pc[from] : null,
+          to ? pc[to] : null,
+          from === "banked" ? "the bank" : "the coins carried",
+        );
+        return `${pc.name} ${verb} ${coinsLine(n)}`;
+      });
+    const carried = coinCount(pc.coins);
+    const per = rules.enc.coinsPerSlot || 100;
+    const weight =
+      party.encumbrance === "slots"
+        ? `${plural(Math.ceil(carried / per), "stowed slot")}`
+        : `${amountText(carried, "coins")} of weight`;
     return h(
       "div",
       { class: "stack" },
@@ -1388,12 +1897,59 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
             h("tr", {}, h("th", {}, ""), ...COIN_KINDS.map((k) => h("th", { class: "num" }, k))),
           ),
           h("tbody", {}, row("Carried", pc.coins), row("Banked", pc.banked)),
+          h(
+            "tfoot",
+            {},
+            h("tr", {}, h("th", {}, "Coins"), ...amounts.map((a) => h("td", { class: "num" }, a))),
+          ),
+        ),
+      ),
+      h(
+        "div",
+        // Not a .row: a change sent from here empties the fields above too.
+        { class: "coin-moves" },
+        h(
+          "span",
+          { class: "pair" },
+          button(
+            "Add",
+            shift(null, "coins", "gains"),
+            "btn ghost",
+            "button",
+            "Add these to the coins carried",
+          ),
+          button(
+            "Remove",
+            shift("coins", null, "spends"),
+            "btn ghost",
+            "button",
+            "Take these from the coins carried",
+          ),
+        ),
+        h(
+          "span",
+          { class: "pair" },
+          button(
+            "Bank",
+            shift("coins", "banked", "banks"),
+            "btn ghost",
+            "button",
+            "Move these from the coins carried to the bank",
+          ),
+          button(
+            "Withdraw",
+            shift("banked", "coins", "withdraws"),
+            "btn ghost",
+            "button",
+            "Move these from the bank to the coins carried",
+          ),
         ),
       ),
       h(
         "p",
         { class: "hint" },
-        `Carried coins count toward the load. Banked: ${formatCoins(pc.banked)}.`,
+        `Carried: worth ${coinsLine(coinsFor(worthCp(pc.coins)))}, ${weight}. `,
+        `Banked: worth ${coinsLine(coinsFor(worthCp(pc.banked)))}, not carried.`,
       ),
     );
   }
@@ -1742,6 +2298,77 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
 }
 
 /** The whole sheet, gear and notes included, for "Print sheet" only. */
+/** A heading's quieter part: " · 3 of 10 slots". */
+const sub = (t: string, cls = ""): HTMLElement =>
+  h("span", { class: `sub${cls ? ` ${cls}` : ""}` }, t);
+
+/** An animal's or vehicle's price, as the book lists it. */
+function transportPrice(t: Transport): string {
+  const p = priceOf(t.cost);
+  return p ? priceText(p) : "no price";
+}
+
+/** The purse to pay from, when the member has banked coins to choose. */
+function purseSelect(pc: PC): HTMLSelectElement | null {
+  if (worthCp(pc.banked) === 0) return null;
+  const el = select(
+    [
+      ["coins", "pay from carried"],
+      ["banked", "pay from banked"],
+    ],
+    "coins",
+  );
+  el.setAttribute("aria-label", "Pay from");
+  return el;
+}
+
+/** Where a dragged item would go, and the row that shows it. */
+interface Drop {
+  el: HTMLElement;
+  /** Onto a row or heading, or into the gap above or below a row. */
+  kind: "on" | "gap-top" | "gap-bottom";
+  /** A gap's level: how deep in containers the item goes. */
+  depth?: number;
+  to: Dest;
+  /** Ids of the item to go before or after, or last in its place. */
+  at?: { before?: string; after?: string; last?: true };
+  label: string;
+}
+
+/** An item dragged by its grip: pointer events, so a finger drags too. */
+interface Drag {
+  id: string;
+  member: number;
+  x: number;
+  y: number;
+  /** Moved far enough to be a drag, not a tap. */
+  on: boolean;
+  /** Ids of the item and what is in it: it can't go into them. */
+  below: Set<string>;
+  /** The rows as drawn when the drag began, for the level of a gap. */
+  shown: { id: string; depth: number }[];
+  pos: Map<string, number>;
+  target: Drop | null;
+  ghost?: HTMLElement;
+  row: HTMLElement | null;
+  table: HTMLElement | null;
+}
+
+function markDrop(t: Drop | null, shown: boolean): void {
+  if (!t) return;
+  if (t.kind === "on") {
+    t.el.classList.toggle("drop-on", shown);
+    return;
+  }
+  t.el.classList.toggle("drop-gap", shown);
+  t.el.classList.toggle(t.kind, shown);
+  if (shown) t.el.style.setProperty("--drop-depth", `${t.depth ?? 0}`);
+  else t.el.style.removeProperty("--drop-depth");
+}
+
+/** "LAND CARTS" → "Land carts". */
+const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
 function printable(data: SheetData): HTMLElement {
   const el = h("article", { class: "sheet member-print" });
   renderSheetData(el, data, { reveal: false });

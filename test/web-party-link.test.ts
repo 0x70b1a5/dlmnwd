@@ -6,7 +6,7 @@ function party() {
   const p = freshParty();
   p.day = 4;
   const pc = blankPc("Orla Venn — “the Wick”");
-  pc.items.push({ name: "Tallow lamp", qty: 2, weight: 10, slots: 1, where: "stowed" });
+  pc.items.push({ name: "Tallow lamp", qty: 2, weight: 10, slots: 1, where: "stowed", id: "i1" });
   pc.notes.push("Owes 3gp to the ferryman ✦");
   p.members.push(pc, blankPc("Bram"));
   return p;

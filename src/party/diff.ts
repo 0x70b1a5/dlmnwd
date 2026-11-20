@@ -2,7 +2,8 @@
 // elsewhere. Members are matched by name. Each change reads "here → there".
 // Pure.
 
-import { ABILITIES, type Coins, type InvItem, type Party, type PC } from "./model.ts";
+import { carrierText, placeText } from "./inventory.ts";
+import { ABILITIES, type Carrier, type Coins, type InvItem, type Party, type PC } from "./model.ts";
 
 export interface MemberDiff {
   name: string;
@@ -25,8 +26,13 @@ function coins(c: Coins): string {
   return parts.join(" ") || "none";
 }
 
-const itemLine = (i: InvItem): string =>
-  `${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.where === "equipped" ? "" : ` (${i.where})`}`;
+/** "Rope ×2 (in the Backpack)": the item and where it is, by name, not id. */
+function itemLine(p: PC, i: InvItem): string {
+  const where = i.where === "equipped" && !i.in ? "" : ` (${placeText(p, i)})`;
+  return `${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${where}`;
+}
+
+const carrierLine = (c: Carrier): string => `${carrierText(c)}, carries ${c.load}`;
 
 /** The entries of `a` that `b` lacks, counting repeats. */
 function only(a: string[], b: string[]): string[] {
@@ -75,7 +81,16 @@ export function memberChanges(a: PC, b: PC): string[] {
   for (const k of SAVES) field(`${k[0].toUpperCase()}${k.slice(1)} save`, a.saves[k], b.saves[k]);
   field("Coins", coins(a.coins), coins(b.coins));
   field("Banked", coins(a.banked), coins(b.banked));
-  out.push(...listChange("Gear", a.items.map(itemLine), b.items.map(itemLine)));
+  out.push(
+    ...listChange(
+      "Gear",
+      a.items.map((i) => itemLine(a, i)),
+      b.items.map((i) => itemLine(b, i)),
+    ),
+  );
+  out.push(
+    ...listChange("Animals and vehicles", a.carriers.map(carrierLine), b.carriers.map(carrierLine)),
+  );
   out.push(...listChange("Spells", a.spells, b.spells));
   out.push(...listChange("Prepared", prepared(a), prepared(b)));
   out.push(...listChange("Glamours", a.glamours, b.glamours));

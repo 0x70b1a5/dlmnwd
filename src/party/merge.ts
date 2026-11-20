@@ -50,6 +50,7 @@ const LABEL: Record<string, string> = {
   skills: "Skills",
   languages: "Languages",
   items: "Gear",
+  carriers: "Animals and vehicles",
   coins: "Coins",
   banked: "Banked coins",
   glamours: "Glamours",

@@ -340,3 +340,68 @@ test("parses the weight, slot, and basic encumbrance tables and slot rules", () 
   ]);
   expect(enc.bulky).toEqual(["crate", "ladder"]);
 });
+
+test("reads a container's capacity in coins, not in other units", () => {
+  const items = parseCatalog([gearPage]);
+  const by = (n: string) => items.find((i) => i.name === n);
+  expect(by("Knapsack")?.capacity).toBe(300);
+  expect(by("Hip purse")?.capacity).toBe(40);
+  expect(by("Hand cart")?.capacity).toBe(2000);
+  expect(by("Gourd")?.capacity).toBeUndefined(); // pints
+});
+
+// Invented tack page: a table whose rows share their lines with a stat block in
+// the right column, one line holding only the right column's text; and an
+// item's own text, in that column, saying what it holds.
+const tackPage = [
+  at([[20, "HARNESS"]]),
+  at([
+    [0, "Item"],
+    [42, "Cost"],
+    [52, "Weight"],
+    [65, "Hoof (+1, 1d4) Pace 40"],
+  ]),
+  at([
+    [0, "Nosebag"],
+    [44, "3cp"],
+    [55, "60"],
+    [65, "XP 15"],
+  ]),
+  at([
+    [0, "Blinkers"],
+    [44, "2gp"],
+    [55, "20"],
+  ]),
+  at([[65, "3. Fen Trotter"]]),
+  at([
+    [0, "Pannier pair"],
+    [44, "6gp"],
+    [54, "120"],
+  ]),
+  at([
+    [0, "Girth strap"],
+    [44, "1gp"],
+    [55, "10"],
+  ]),
+  "",
+  at([
+    [0, "A paragraph on the left."],
+    [65, "Pannier pair: Baskets either side,"],
+  ]),
+  at([
+    [0, "More of it."],
+    [65, "holding up to 450 coins in all."],
+  ]),
+].join("\n");
+
+test("reads on past a row holding only the next column's text", () => {
+  const items = parseCatalog([tackPage]);
+  expect(items.map((i) => i.name)).toEqual(["Nosebag", "Blinkers", "Pannier pair", "Girth strap"]);
+  expect(items.find((i) => i.name === "Pannier pair")).toMatchObject({ weight: 120, cost: "6gp" });
+});
+
+test("reads what an item holds from its own text", () => {
+  const items = parseCatalog([tackPage]);
+  expect(items.find((i) => i.name === "Pannier pair")?.capacity).toBe(450);
+  expect(items.find((i) => i.name === "Nosebag")?.capacity).toBeUndefined();
+});

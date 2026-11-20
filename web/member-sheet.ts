@@ -4,7 +4,8 @@
 
 import { coinCount, computeAc, describeLoad } from "../src/party/encumbrance.ts";
 import { type InvItem, itemSlots, type Party, type PC } from "../src/party/model.ts";
-import { formatCoins, loadOf } from "../src/party/render.ts";
+import { placeGroups } from "../src/party/inventory.ts";
+import { formatCoins, groupTitle, loadOf } from "../src/party/render.ts";
 import { classOf, kindredOf, type PartyRules } from "../src/party/rules.ts";
 import { runeStatus } from "../src/party/runes.ts";
 import { nextLevelXp } from "../src/party/xp.ts";
@@ -13,14 +14,14 @@ import { personaRows, physiqueRows, type SheetData } from "./sheet.ts";
 
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 
-function itemRow(i: InvItem, method: Party["encumbrance"]): [string, string] {
-  const name = `${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""}`;
+function itemRow(i: InvItem, method: Party["encumbrance"], depth: number): [string, string] {
+  const name = `${"— ".repeat(depth)}${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""}`;
   const stowed = i.where === "equipped" ? "" : i.where;
   if (method === "basic") return [name, stowed || "equipped"];
   // Stashed gear is not carried, so it counts for nothing.
   if (i.where === "stashed") return [name, "stashed"];
   const n = method === "slots" ? itemSlots(i) : i.qty * i.weight;
-  return [name, [String(n), stowed].filter((x) => x).join(", ")];
+  return [name, [String(n), i.where === "loaded" ? "" : stowed].filter((x) => x).join(", ")];
 }
 
 const GEAR_HEAD: Record<Party["encumbrance"], [string, string]> = {
@@ -38,12 +39,13 @@ export function memberSheet(pc: PC, party: Party, rules: PartyRules, book: Book 
   const load = loadOf(pc, party, rules);
   const next = nextLevelXp(pc, klass);
 
-  const gear: [string, string][] = [
-    ...pc.items.filter((i) => i.where === "equipped").map((i) => itemRow(i, party.encumbrance)),
-    ...pc.items.filter((i) => i.where === "stowed").map((i) => itemRow(i, party.encumbrance)),
-    ...pc.items.filter((i) => i.where === "stashed").map((i) => itemRow(i, party.encumbrance)),
-    ["Coins", formatCoins(pc.coins)],
-  ];
+  const gear: [string, string][] = [];
+  for (const g of placeGroups(pc)) {
+    // Each animal or vehicle gets a line with its load; then what is on it.
+    if (g.carrier) gear.push([groupTitle(pc, g, party, rules), ""]);
+    for (const r of g.rows) gear.push(itemRow(r.item, party.encumbrance, r.depth));
+  }
+  gear.push(["Coins", formatCoins(pc.coins)]);
   if (coinCount(pc.banked) > 0) gear.push(["Banked", formatCoins(pc.banked)]);
   gear.push(["Load", describeLoad(load)]);
   for (const p of load.problems) gear.push(["Problem", p]);

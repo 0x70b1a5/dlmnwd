@@ -21,6 +21,9 @@ function detail(i: CatalogItem): string {
     i.ac ? `AC ${i.ac}` : "",
     i.qualities ?? "",
     i.weight ? `weight ${i.weight}` : "",
+    i.capacity
+      ? `${i.kind === "container" ? "holds" : "carries"} ${i.capacity.toLocaleString("en")} coins`
+      : "",
   ];
   return parts.filter(Boolean).join(", ");
 }

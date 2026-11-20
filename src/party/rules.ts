@@ -7,6 +7,7 @@ import type { ParsedClass } from "../parse/class.ts";
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import type { ParsedKindred } from "../parse/kindred.ts";
 import type { RuneRules } from "../parse/rune.ts";
+import type { Transport } from "../parse/transport.ts";
 import type { XpBand } from "../parse/xp.ts";
 import { DEFAULT_PRIME_XP, DEFAULT_WEIGHT_BANDS } from "../rules.ts";
 
@@ -22,6 +23,8 @@ export interface PartyRules {
   knacks: string[];
   /** Every spell in the book: its name, tradition and Rank. */
   spells: SpellRef[];
+  /** The animals and vehicles the book sells to carry loads (parse/transport.ts). */
+  transport: Transport[];
 }
 
 export interface SpellRef {
@@ -56,6 +59,7 @@ export function emptyRules(): PartyRules {
     glamours: [],
     knacks: [],
     spells: [],
+    transport: [],
   };
 }
 
@@ -90,6 +94,7 @@ export function rulesFromLookups(
     glamours: get<string[]>("glamours") ?? [],
     knacks: get<string[]>("knacks") ?? [],
     spells: spells.map((s) => ({ name: s.name, tradition: s.tradition, rank: s.rank })),
+    transport: get<Transport[]>("transport") ?? [],
   };
 }
 

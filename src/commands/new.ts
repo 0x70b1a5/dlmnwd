@@ -28,6 +28,7 @@ import {
 } from "../rules.ts";
 import { buy } from "../gen/shop.ts";
 import { characterToPc } from "../party/from-character.ts";
+import { shopCatalog } from "../party/inventory.ts";
 import { resolveItem } from "../party/items.ts";
 import { saveParty } from "../party/store.ts";
 import { partyContext } from "./party.ts";
@@ -42,11 +43,12 @@ export function cmdNew(args: string[]): void {
   const wanted = (flag(args, "--buy") ?? "").split(",").filter((w) => w.trim());
   const ctx = toParty || wanted.length ? partyContext() : null;
   // "--buy=rope, torch x2" buys from the book's price lists, in order.
+  const sold = ctx ? shopCatalog(ctx.rules) : [];
   for (const want of wanted) {
-    const { item, qty } = resolveItem(ctx!.rules.catalog, want);
+    const { item, qty } = resolveItem(sold, want);
     try {
       if (!item) throw new Error(`"${want.trim()}" isn't in the book's equipment lists.`);
-      for (let n = 0; n < qty; n++) buy(character, item, ctx!.rules.catalog);
+      for (let n = 0; n < qty; n++) buy(character, item, sold);
     } catch (err) {
       console.error((err as Error).message);
       process.exit(1);

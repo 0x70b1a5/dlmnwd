@@ -33,6 +33,8 @@ export interface CatalogItem {
   damage?: string; // weapons
   size?: string; // weapons
   qualities?: string; // weapons
+  /** Containers: coins of weight it holds (the Capacity column, or the item's own text). */
+  capacity?: number;
 }
 
 interface Tok {
@@ -150,9 +152,12 @@ function readRows(lines: string[], from: number, b: Block, title: string): [Cata
     const nameToks = ts.filter((t) => t.x < nameEnd);
     if (nameToks.length === 0) {
       // A table interleaved with a neighbour's prose can leave a blank row in
-      // its region; carry on only if a row follows straight after.
+      // its region, or a row with only the neighbour's text, right of the
+      // Weight column; carry on only if a row follows straight after.
       const next = lines[i + 1] !== undefined ? slice(lines[i + 1], b.x0, b.x1) : "";
-      if (ts.length === 0 && toks(next, b.x0).some((t) => t.x < nameEnd)) continue;
+      const weight = b.cols.find((c) => c.text === "Weight")!;
+      const beside = ts.every((t) => t.x > weight.end + 3);
+      if (beside && toks(next, b.x0).some((t) => t.x < nameEnd)) continue;
       break;
     }
     const name = nameToks.map((t) => t.text).join(" ");
@@ -173,6 +178,8 @@ function readRows(lines: string[], from: number, b: Block, title: string): [Cata
     const item: CatalogItem = { name, kind, ...w, section: title };
     const cost = cell("Cost");
     if (cost) item.cost = cost;
+    const holds = (cell("Capacity") ?? "").match(/^([\d,]+)\s+coins?$/);
+    if (holds) item.capacity = parseInt(holds[1].replace(/,/g, ""), 10);
     if (kind === "armour") {
       item.ac = cell("AC");
       item.bulk = cell("Bulk");
@@ -206,7 +213,37 @@ export function parseCatalog(pages: string[]): CatalogItem[] {
       }
     });
   }
-  return [...seen.values()];
+  const items = [...seen.values()];
+  for (const it of items) {
+    if (it.capacity !== undefined) continue;
+    const holds = textCapacity(pages, it.name);
+    if (holds !== undefined) it.capacity = holds;
+  }
+  return items;
+}
+
+const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * What an item holds, from its own description: "Name: … holds up to 300
+ * coins …", on the line that starts it or the next line in the same column.
+ */
+function textCapacity(pages: string[], name: string): number | undefined {
+  const start = new RegExp(`(?:^|\\s{2})${escape(name)}:\\s`, "i");
+  for (const page of pages) {
+    if (!page.toLowerCase().includes(`${name.toLowerCase()}:`)) continue;
+    const lines = page.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(start);
+      if (!m) continue;
+      const x = (m.index ?? 0) + (m[0].length - m[0].trimStart().length);
+      const own = (l: string | undefined): string => (l ?? "").slice(x).split(/\s{3,}/)[0];
+      const text = `${own(lines[i])} ${own(lines[i + 1])}`;
+      const n = text.match(/\bhold(?:s|ing)? up to ([\d,]+) coins\b/i);
+      if (n) return parseInt(n[1].replace(/,/g, ""), 10);
+    }
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

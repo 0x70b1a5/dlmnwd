@@ -3,6 +3,14 @@
 import { abilityMod } from "../rules.ts";
 import { coinCount, computeAc, computeLoad, describeLoad, type Load } from "./encumbrance.ts";
 import { savesMissing } from "./repair.ts";
+import {
+  amountText,
+  carrierLoad,
+  carrierText,
+  keptText,
+  type PlaceGroup,
+  placeGroups,
+} from "./inventory.ts";
 import { classOf, kindredOf, type PartyRules } from "./rules.ts";
 import { runeStatus } from "./runes.ts";
 import { slotLine } from "./spells.ts";
@@ -14,8 +22,6 @@ import {
   itemSlots,
   type Party,
   type PC,
-  type Where,
-  WHERES,
 } from "./model.ts";
 import { canLevel, nextLevelXp, xpModifier } from "./xp.ts";
 
@@ -53,14 +59,32 @@ function pad(s: string, n: number): string {
   return s.length >= n ? s : s + " ".repeat(n - s.length);
 }
 
-function itemLine(i: InvItem, method: Party["encumbrance"]): string {
+function itemLine(i: InvItem, method: Party["encumbrance"], depth = 0): string {
   const qty = i.qty !== 1 ? ` ×${i.qty}` : "";
   const note = i.note ? ` (${i.note})` : "";
   const cost =
     method === "slots"
       ? `${itemSlots(i)} slot${itemSlots(i) === 1 ? "" : "s"}`
       : `${i.qty * i.weight}`;
-  return `  ${pad(`${i.name}${qty}${note}`, 40)} ${cost}`;
+  const indent = "  ".repeat(depth);
+  return `  ${pad(`${indent}${i.name}${qty}${note}`, 40)} ${cost}`;
+}
+
+/** A place's heading: "Stowed", "On Bramble (Marsh pony): 300 of 1,800 coins". */
+export function groupTitle(pc: PC, g: PlaceGroup, party: Party, rules: PartyRules): string {
+  if (g.carrier) {
+    const c = g.carrier;
+    const l = carrierLoad(pc, c, party.encumbrance, rules.enc);
+    const state =
+      l.state === "slow"
+        ? " ⚠ half Speed"
+        : l.state === "over"
+          ? " ⚠ over the most it carries"
+          : "";
+    return `On ${carrierText(c)}: ${l.used.toLocaleString("en")} of ${amountText(l.capacity, l.unit)}${state}`;
+  }
+  if (g.where === "stashed") return `Stashed${g.kept ? ` ${keptText(g.kept)}` : ""} (not carried)`;
+  return g.where === "equipped" ? "Equipped" : "Stowed";
 }
 
 /** The full text view of one character. */
@@ -102,13 +126,10 @@ export function showPc(pc: PC, party: Party, rules: PartyRules): string {
   out.push("");
   out.push(`Load (${party.encumbrance}): ${describeLoad(load)}`);
   for (const p of load.problems) out.push(`  ⚠ ${p}`);
-  for (const where of WHERES) {
-    const items = pc.items.filter((i) => i.where === where);
-    if (items.length === 0) continue;
-    out.push(
-      `${where.charAt(0).toUpperCase()}${where.slice(1)}${where === "stashed" ? " (not carried)" : ""}`,
-    );
-    for (const i of items) out.push(itemLine(i, party.encumbrance));
+  for (const g of placeGroups(pc)) {
+    if (g.rows.length === 0 && !g.carrier) continue;
+    out.push(groupTitle(pc, g, party, rules));
+    for (const r of g.rows) out.push(itemLine(r.item, party.encumbrance, r.depth));
   }
   const coins = coinCount(pc.coins);
   out.push(
@@ -190,13 +211,11 @@ export function pcMarkdown(pc: PC, party: Party, rules: PartyRules): string {
   const load = loadOf(pc, party, rules);
   const next = nextLevelXp(pc, klass);
   const s = pc.saves;
-  const items = (where: Where) =>
-    pc.items
-      .filter((i) => i.where === where)
-      .map(
-        (i) =>
-          `| ${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""} | ${where} | ${i.qty * i.weight} | ${itemSlots(i)} |`,
-      );
+  const items = (g: PlaceGroup) =>
+    g.rows.map(
+      ({ item: i, depth }) =>
+        `| ${"— ".repeat(depth)}${i.name}${i.qty !== 1 ? ` ×${i.qty}` : ""}${i.note ? ` (${i.note})` : ""} | ${groupTitle(pc, g, party, rules)} | ${i.qty * i.weight} | ${itemSlots(i)} |`,
+    );
   const runes = pc.runes.map((r) => {
     const st = runeStatus(r, pc, party.day, rules.runes);
     return `- **${r.name}** (${r.magnitude || "?"}${st.band ? `; ${st.band.text}` : ""})`;
@@ -254,7 +273,7 @@ ${Object.entries(pc.skills)
 
 | Item | Carried | Weight | Slots |
 |---|---|---|---|
-${WHERES.flatMap(items).join("\n")}
+${placeGroups(pc).flatMap(items).join("\n")}
 
 **Coins:** ${formatCoins(pc.coins)}${coinCount(pc.banked) ? `  \n**Banked:** ${formatCoins(pc.banked)}` : ""}
 ${pc.glamours.length ? `\n## Glamours\n\n${pc.glamours.map((g) => `- ${g}`).join("\n")}\n` : ""}${runes.length ? `\n## Runes\n\n${runes.join("\n")}\n` : ""}${pc.knacks.length ? `\n## Knacks\n\n${pc.knacks.map((k) => `- ${k}`).join("\n")}\n` : ""}${pc.spells.length ? `\n## Spells\n\n${pc.spells.map((k) => `- ${k}`).join("\n")}\n` : ""}${pc.notes.length ? `\n## Notes\n\n${pc.notes.map((n) => `- ${n}`).join("\n")}\n` : ""}`;

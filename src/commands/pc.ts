@@ -12,7 +12,21 @@ import {
   setField,
 } from "../party/actions.ts";
 import { describeLoad, type Load } from "../party/encumbrance.ts";
-import { addItem, findItem, makeItem, removeItem, slotCost } from "../party/items.ts";
+import {
+  addCarrier,
+  amountText,
+  buyCarrier,
+  buyItem,
+  carrierLoad,
+  carrierText,
+  findCarrier,
+  findTransport,
+  moveItem,
+  type Purse,
+  placeText,
+  removeCarrier,
+} from "../party/inventory.ts";
+import { addItem, findItem, makeItem, removeItem, resolveItem, slotCost } from "../party/items.ts";
 import { firstName } from "../party/import.ts";
 import { formatCoins, loadOf, pcMarkdown, showParty, showPc } from "../party/render.ts";
 import { classOf, type PartyRules } from "../party/rules.ts";
@@ -27,6 +41,69 @@ import {
   traditionSpells,
 } from "../party/spells.ts";
 import { findMember, type Party, type PC, saveParty, type Where, WHERES } from "../party/store.ts";
+
+/** The character's animals and vehicles: list, add (or buy), remove, set. */
+function animalCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: string[]): void {
+  const [sub, ...words] = rest;
+  const name = words.filter((w) => !w.includes("=")).join(" ");
+  switch (sub) {
+    case undefined:
+    case "list": {
+      if (pc.carriers.length === 0) console.log(`${pc.name} has no animals or vehicles.`);
+      for (const c of pc.carriers) {
+        const l = carrierLoad(pc, c, party.encumbrance, rules.enc);
+        const state =
+          l.state === "normal" ? "" : l.state === "slow" ? "  ⚠ half Speed" : "  ⚠ over";
+        console.log(
+          `${carrierText(c)}: ${l.used.toLocaleString("en")} of ${amountText(l.capacity, l.unit)}` +
+            `${c.speed !== undefined ? `, Speed ${l.speed}` : ""}${state}`,
+        );
+      }
+      if (rules.transport.length)
+        console.log(`  From the book: ${rules.transport.map((t) => t.name).join(", ")}`);
+      return;
+    }
+    case "add":
+    case "buy": {
+      const t = findTransport(rules.transport, name);
+      const purse: Purse = args.includes("--banked") ? "banked" : "coins";
+      const label = flag(args, "--name");
+      const line =
+        sub === "buy" || args.includes("--buy")
+          ? buyCarrier(pc, t, { name: label, purse }).line
+          : `${pc.name} +${carrierText(addCarrier(pc, t, label))}, not paid for`;
+      saveParty(party);
+      console.log(line);
+      return;
+    }
+    case "rm":
+    case "remove": {
+      const line = removeCarrier(pc, findCarrier(pc, name));
+      saveParty(party);
+      console.log(line);
+      return;
+    }
+    case "set": {
+      const c = findCarrier(pc, name);
+      for (const kv of words.filter((w) => w.includes("="))) {
+        const [k, v] = kv.split("=", 2);
+        if (k === "name") c.name = v.trim() || c.type;
+        else if (k === "load") {
+          const n = parseInt(v, 10);
+          if (!Number.isFinite(n) || n < 0) throw new Error("load= takes a number of coins.");
+          c.load = n;
+        } else throw new Error(`Unknown field "${k}" (name=, load=).`);
+      }
+      saveParty(party);
+      console.log(`${pc.name}: ${c.name} carries ${c.load} coins`);
+      return;
+    }
+    default:
+      throw new Error(
+        "usage: dw pc <name> animal [list | add <type> | rm <name> | set <name> k=v]",
+      );
+  }
+}
 import { canLevel, grantXp, levelUp, nextLevelXp } from "../party/xp.ts";
 import { partyContext } from "./party.ts";
 
@@ -37,7 +114,15 @@ const USAGE = `usage: dw pc <name> [command]      (name: any unambiguous part of
                                    --treasure, --as="Label" to keep your own name)
   item rm <item> [qty]           drop some or all of an item
   item set <item> k=v…           weight=, slots=, qty=, name=, note=, treasure=yes|no
-  equip <item> / stow <item>     move an item between equipped and stowed
+  equip|stow <item>              move an item to equipped or stowed (out of any container)
+  stash <item> [--at="the inn"]  leave an item behind; --at says where it is kept
+  put <item> in <container>      put an item inside another (it goes where that goes)
+  put <item> on <animal>         load an item on one of the character's animals or vehicles
+  buy <item> [qty] [--banked]    buy from the book's lists at its price (an animal too)
+  animal                         the character's animals and vehicles, and their loads
+  animal add <type> [--name=X]   add one from the book's list (--buy pays its price)
+  animal rm <name>               what was on it is stashed under its name
+  animal set <name> k=v…         name=, load= (coins it carries)
   coins <±N(cp|sp|gp|pp)>…       e.g. coins +120gp -3sp   (=N sets)
   bank <N(cp|sp|gp|pp)>…         move carried coins to the bank   (withdraw: back)
   hp <±N | =N | max>             damage, heal, set, or restore to full
@@ -123,15 +208,63 @@ export function cmdPc(args: string[]): void {
     case "stash": {
       const before = loadOf(pc, party, rules);
       const inv = findItem(pc, rest.join(" "));
-      const where: Where = verb === "equip" ? "equipped" : verb === "stow" ? "stowed" : "stashed";
-      if (where === "stowed" && inv.bulky)
-        console.log(`  ⚠ ${inv.name} is bulky: it takes two hands and can't be stowed.`);
-      inv.where = where;
+      const at = flag(args, "--at");
+      const said =
+        verb === "stash"
+          ? moveItem(pc, inv, at ? { where: "stashed", kept: at } : { where: "stashed" }, rules.enc)
+          : moveItem(pc, inv, { where: verb === "equip" ? "equipped" : "stowed" }, rules.enc);
       save();
-      console.log(`${pc.name}: ${inv.name} → ${where}`);
+      console.log(`${pc.name}: ${said}`);
       reportLoad(pc, party, rules, before);
       return;
     }
+
+    case "put":
+    case "load": {
+      // put <item> in <container> | put <item> on <animal>
+      const k = rest.findIndex((w) => w === "in" || w === "into" || w === "on" || w === "onto");
+      if (k < 1 || k === rest.length - 1)
+        throw new Error("usage: dw pc <name> put <item> in <container> | on <animal>");
+      const before = loadOf(pc, party, rules);
+      const inv = findItem(pc, rest.slice(0, k).join(" "));
+      const target = rest.slice(k + 1).join(" ");
+      const said = rest[k].startsWith("in")
+        ? moveItem(pc, inv, { in: findItem(pc, target).id! }, rules.enc)
+        : moveItem(pc, inv, { where: "loaded", on: findCarrier(pc, target).id }, rules.enc);
+      save();
+      console.log(`${pc.name}: ${said}`);
+      reportLoad(pc, party, rules, before);
+      return;
+    }
+
+    case "buy": {
+      const before = loadOf(pc, party, rules);
+      const purse: Purse = args.includes("--banked") ? "banked" : "coins";
+      const n =
+        rest.length > 1 && /^\d+$/.test(rest.at(-1)!) ? parseInt(rest.at(-1)!, 10) : undefined;
+      const text = (n === undefined ? rest : rest.slice(0, -1)).join(" ");
+      if (!text) throw new Error("usage: dw pc <name> buy <item> [qty] [--banked]");
+      const t = rules.transport.find((x) => x.name.toLowerCase() === text.toLowerCase());
+      if (t && !resolveItem(rules.catalog, text).item) {
+        const { line } = buyCarrier(pc, t, { purse, name: flag(args, "--name") });
+        save();
+        console.log(line);
+        return;
+      }
+      const { line } = buyItem(pc, rules, text, { qty: n, purse });
+      save();
+      console.log(line);
+      console.log(`  ${formatCoins(pc.coins)} carried; ${formatCoins(pc.banked)} banked`);
+      reportLoad(pc, party, rules, before);
+      return;
+    }
+
+    case "animal":
+    case "animals":
+    case "mount":
+    case "vehicle":
+    case "carrier":
+      return animalCmd(pc, party, rules, rest, args);
 
     case "coins":
     case "coin":
@@ -330,7 +463,7 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
         ? `${resolved.item.name}: ${inv.weight} coins${inv.qty > 1 ? " each" : ""}, ${inv.slots} slot${inv.slots === 1 ? "" : "s"}`
         : `not in the book's lists: weight ${inv.weight} (set with --weight=N)`;
       console.log(
-        `${pc.name} +${inv.qty} ${inv.name} → ${inv.where}  [${found}]` +
+        `${pc.name} +${inv.qty} ${inv.name} → ${placeText(pc, stacked)}  [${found}]` +
           (stacked.qty !== inv.qty ? `  (now ×${stacked.qty})` : ""),
       );
       reportLoad(pc, party, rules, before);
@@ -364,8 +497,8 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
         else if (k === "treasure") inv.treasure = yes(val);
         else if (k === "where") {
           if (!(WHERES as readonly string[]).includes(val))
-            throw new Error(`where: ${WHERES.join("|")}`);
-          inv.where = val as Where;
+            throw new Error(`where: ${WHERES.join("|")} (put <item> on <animal> loads it)`);
+          moveItem(pc, inv, { where: val as Exclude<Where, "loaded"> }, rules.enc);
         } else if (k === "ref") {
           const { item } = makeItem(rules.catalog, rules.enc, val).resolved;
           if (!item) throw new Error(`"${val}" isn't in the book's equipment lists.`);
@@ -374,10 +507,10 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
           inv.slots = slotCost(item, item.name, rules.enc);
         } else throw new Error(`Unknown item field "${k}".`);
       }
-      if (pc.items.includes(inv) && inv.qty <= 0) pc.items = pc.items.filter((i) => i !== inv);
+      if (pc.items.includes(inv) && inv.qty <= 0) removeItem(pc, inv);
       saveParty(party);
       console.log(
-        `${pc.name}: ${inv.name} ×${inv.qty}, ${inv.weight} coins, ${inv.slots} slots, ${inv.where}`,
+        `${pc.name}: ${inv.name} ×${inv.qty}, ${inv.weight} coins, ${inv.slots} slots, ${placeText(pc, inv)}`,
       );
       reportLoad(pc, party, rules, before);
       return;

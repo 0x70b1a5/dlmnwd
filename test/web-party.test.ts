@@ -182,3 +182,92 @@ test("an item moved to the stash leaves the load, and comes back", async () => {
   expect(root.querySelector(".load-line")!.textContent).not.toContain("200");
   expect(notes.at(-1)).toBe("Orla Venn: Tent → stashed");
 });
+
+// Invented gear and beasts for the gear-by-place tests.
+const packRules: PartyRules = {
+  ...rules,
+  catalog: [
+    { name: "Knapsack", kind: "container", weight: 40, capacity: 300, cost: "3", section: "BAGS" },
+    { name: "Thimble", kind: "gear", weight: 1, cost: "2cp", section: "TOOLS" },
+  ],
+  enc: { ...rules.enc, stowContainers: ["knapsack"] },
+  transport: [
+    { name: "Marsh pony", kind: "animal", section: "BEASTS", cost: "35", load: 1800, speed: 70 },
+    { name: "Mud skid", kind: "vehicle", section: "HAULAGE", cost: "45", load: 800 },
+  ],
+};
+
+const packer = {
+  name: "Orla Venn",
+  class: "warden",
+  level: 2,
+  saves: saves(11),
+  coins: { pp: 0, gp: 40, sp: 0, cp: 0 },
+  items: [
+    { id: "i1", name: "Knapsack", ref: "Knapsack", qty: 1, weight: 40, slots: 1, where: "stowed" },
+    { id: "i2", name: "Thimble", ref: "Thimble", qty: 1, weight: 1, slots: 0, where: "equipped" },
+  ],
+  carriers: [{ id: "c1", name: "Bramble", type: "Marsh pony", kind: "animal", load: 1800 }],
+};
+
+const choose = async (label: string, value: string): Promise<void> => {
+  const el = byLabel(label) as HTMLSelectElement;
+  el.value = value;
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+};
+
+test("gear is listed by place, and an item goes into a container or onto an animal", async () => {
+  await mount(packer);
+  view.setRules(packRules);
+  const heads = () => [...root.querySelectorAll("tr.grp")].map((r) => r.textContent ?? "");
+  expect(heads().some((t) => t.startsWith("On Bramble"))).toBe(true);
+  await choose("Where Thimble is", "in:i1");
+  expect(stored().items[1]).toMatchObject({ in: "i1", where: "stowed" });
+  // Inside the knapsack it is drawn one level in, under it.
+  const row = root.querySelector('tr[data-item="i2"]')!;
+  expect(row.previousElementSibling?.getAttribute("data-item")).toBe("i1");
+  expect(row.querySelector("td.item")!.getAttribute("style") ?? "").toMatch(/--depth: ?1/);
+  expect(notes.at(-1)).toContain("Thimble");
+  // The knapsack onto the pony: what is in it goes too.
+  await choose("Where Knapsack is", "on:c1");
+  expect(stored().items.map((i: { where: string }) => i.where)).toEqual(["loaded", "loaded"]);
+  expect(root.querySelector(".load-line")!.textContent).not.toContain("41");
+});
+
+test("an animal is bought from the book's list and paid for", async () => {
+  await mount({ ...packer, carriers: [] });
+  view.setRules(packRules);
+  await choose("Animal or vehicle", "Marsh pony");
+  const named = byLabel("Its name") as HTMLInputElement;
+  named.value = "Turnip";
+  named.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await settle();
+  expect(stored().carriers).toEqual([
+    expect.objectContaining({ name: "Turnip", type: "Marsh pony", load: 1800, speed: 70 }),
+  ]);
+  expect(stored().coins.gp).toBe(5);
+  expect(root.textContent).toContain("at half");
+  byLabel("Remove Turnip").click();
+  expect(stored().carriers).toEqual([]);
+});
+
+test("coins are added, banked and withdrawn from the amounts given", async () => {
+  await mount(packer);
+  view.setRules(packRules);
+  const gp = () => byLabel("gp to add or move") as HTMLInputElement;
+  const press = (title: string) => byLabel(title).click();
+  gp().value = "6";
+  press("Add these to the coins carried");
+  expect(stored().coins.gp).toBe(46);
+  // The amount is spent: the field is empty again.
+  expect(gp().value).toBe("");
+  gp().value = "20";
+  press("Move these from the coins carried to the bank");
+  expect(stored().coins.gp).toBe(26);
+  expect(stored().banked.gp).toBe(20);
+  gp().value = "30";
+  press("Move these from the bank to the coins carried");
+  expect(stored().banked.gp).toBe(20);
+  expect(root.textContent).toContain("Only 20gp in the bank");
+});

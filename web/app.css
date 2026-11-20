@@ -2073,14 +2073,250 @@ ul.chips-list {
   }
 }
 
-/* A stashed item is on the list but not carried. */
+/* Gear by place (party.ts gearBlock): a heading row for each place, each
+   container's contents under it, and a grip to drag a row by. */
 .party .gear select.where {
   font: inherit;
   font-size: 0.85rem;
 }
-.party .gear tr:has(select[data-stashed]) > td:first-child {
+.party .gear input.kept {
+  display: block;
+  width: 9.5rem;
+  margin-top: 0.15rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85rem;
+}
+/* On an animal or stashed: on the list, not on the character. */
+.party .gear tr.off td.item {
   color: var(--ink-soft);
   font-style: italic;
+}
+.party .gear tr.grp td {
+  padding: 0.75rem 0.3rem 0.2rem;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.party .gear tbody tr.grp:first-child td {
+  padding-top: 0.35rem;
+}
+.party .gear tr.grp .sub {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.party .gear tr.grp.carrier td {
+  color: var(--ink);
+}
+.party .load.slow {
+  color: var(--ember-2);
+  font-weight: 600;
+}
+.party .load.over {
+  color: var(--ember);
+  font-weight: 600;
+}
+.party .gear tr.grp.empty,
+.party .gear tr.cend {
+  display: none;
+}
+.party .gear.dragging tr.grp.empty,
+.party .gear.dragging tr.cend {
+  display: table-row;
+}
+.party .gear.dragging tr.grp td {
+  outline: 1px dashed var(--line);
+  outline-offset: -2px;
+}
+.party .gear td.item {
+  position: relative;
+  padding-left: calc(0.3rem + var(--depth, 0) * 1rem);
+}
+/* One thin line for each container an item is in. */
+.party .gear td.item::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 0.55rem;
+  width: calc(var(--depth, 0) * 1rem - 0.5rem);
+  background: repeating-linear-gradient(to right, var(--faint) 0 1px, transparent 1px 1rem);
+  pointer-events: none;
+}
+.party .gear .iline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+.party .gear .grip {
+  flex: none;
+  align-self: center;
+  width: 1.1rem;
+  text-align: center;
+  color: var(--faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.party .gear .grip:hover {
+  color: var(--ember);
+}
+/* A finger takes the grip from a little beside it too. */
+@media (pointer: coarse) {
+  .party .gear .grip {
+    position: relative;
+    width: 1.5rem;
+  }
+  .party .gear .grip::after {
+    content: "";
+    position: absolute;
+    inset: -0.5rem -0.6rem;
+    touch-action: none;
+  }
+}
+.party .gear .fill {
+  display: block;
+  padding-left: 1.4rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: normal;
+}
+.party .gear .fill.over {
+  color: var(--ember);
+  font-weight: 600;
+}
+.party .gear tr.drop-on td {
+  background: color-mix(in srgb, var(--ember) 14%, transparent);
+}
+.party .gear tr.grp.drop-on td {
+  outline-color: var(--ember);
+}
+.party .gear tr.drag-src td {
+  opacity: 0.4;
+}
+.party .gear tr.drop-gap td.item::after {
+  content: "";
+  position: absolute;
+  left: calc(0.3rem + var(--drop-depth, 0) * 1rem);
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ember);
+  pointer-events: none;
+}
+.party .gear tr.drop-gap.gap-top td.item::after {
+  top: -2px;
+}
+.party .gear tr.drop-gap.gap-bottom td.item::after {
+  bottom: -2px;
+}
+.party .gear tr.drop-gap.gap-top td:not(.item) {
+  box-shadow: inset 0 2px 0 var(--ember);
+}
+.party .gear tr.drop-gap.gap-bottom td:not(.item) {
+  box-shadow: inset 0 -2px 0 var(--ember);
+}
+.party .gear tr.cend td {
+  padding: 1px 0.3rem 1px calc(1.6rem + var(--depth, 0) * 1rem);
+  border-bottom: 0;
+}
+.party .gear tr.cend td span {
+  display: block;
+  padding: 1px 0.5rem;
+  border-radius: 4px;
+  outline: 1px dashed var(--line);
+  outline-offset: -1px;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+.party .gear tr.cend.drop-on td {
+  background: none;
+}
+.party .gear tr.cend.drop-on td span {
+  outline-color: var(--ember);
+  background: color-mix(in srgb, var(--ember) 14%, transparent);
+}
+body.dragging,
+body.dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  max-width: 80vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--ember);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--paper-2);
+  box-shadow: 0 2px 8px rgba(var(--shade), 0.25);
+  pointer-events: none;
+}
+.drag-ghost.none {
+  border-color: var(--line);
+  opacity: 0.7;
+}
+
+/* The member's animals and vehicles. */
+.party .carriers {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.party .carriers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+.party .carriers li input[type="text"] {
+  width: 10rem;
+}
+.party .carriers .facts,
+.party .carriers .carries {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.party form.add-carrier select {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+/* Coins to add, take away, bank or withdraw (party.ts coinBlock). */
+.party .coins tfoot th,
+.party .coins tfoot td {
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line-soft);
+}
+.party .coin-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+}
+@container sheet (max-width: 560px) {
+  .party .gear select.where {
+    max-width: 7.5rem;
+  }
+  .party .gear input.kept {
+    width: 7.5rem;
+  }
+}
+.party .coin-moves .pair {
+  display: inline-flex;
+  gap: 0.3rem;
 }
 
 /* Signed in to the server that keeps saves (cloud.ts), when the deploy has one. */

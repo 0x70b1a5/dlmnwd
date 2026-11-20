@@ -5,7 +5,7 @@
 import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import { singular } from "../parse/gear.ts";
 import { SLOT_COST } from "../rules.ts";
-import type { InvItem, PC, Where } from "./model.ts";
+import { freeId, type InvItem, type PC, type Where } from "./model.ts";
 
 const STOP = new Set(["of", "and", "or", "the", "a", "an", "with"]);
 
@@ -227,20 +227,25 @@ export function makeItem(
   return { inv, resolved };
 }
 
-/** Add an entry, stacking onto the same item already carried in the same place
- *  (same book entry, or the same name when it has none). */
+/** Add an entry, stacking onto the same item already in the same place, loose
+ *  (same book entry, or the same name when it has none). A new entry gets an id. */
 export function addItem(pc: PC, inv: InvItem): InvItem {
   const same = pc.items.find(
     (i) =>
       (i.name === inv.name || (!!inv.ref && inv.name === inv.ref && i.ref === inv.ref)) &&
       i.where === inv.where &&
       i.weight === inv.weight &&
+      (i.in ?? "") === (inv.in ?? "") &&
+      (i.on ?? "") === (inv.on ?? "") &&
+      (i.kept ?? "") === (inv.kept ?? "") &&
       !i.note,
   );
   if (same && !inv.note) {
     same.qty += inv.qty;
     return same;
   }
+  const ids = new Set(pc.items.flatMap((i) => (i.id ? [i.id] : [])));
+  if (!inv.id || ids.has(inv.id)) inv.id = freeId(ids, "i");
   pc.items.push(inv);
   return inv;
 }
@@ -273,10 +278,21 @@ export function findItem(pc: PC, query: string): InvItem {
   throw new Error(`${pc.name} isn't carrying anything matching "${query}".`);
 }
 
-/** Remove qty of an item (all of it when qty is omitted). Returns what was removed. */
+/** Remove qty of an item (all of it when qty is omitted). Returns what was
+ *  removed. What was inside a container that goes stays, one level up. */
 export function removeItem(pc: PC, inv: InvItem, qty?: number): number {
   const n = Math.min(qty ?? inv.qty, inv.qty);
   inv.qty -= n;
-  if (inv.qty <= 0) pc.items = pc.items.filter((i) => i !== inv);
+  if (inv.qty <= 0) dropEntry(pc, inv);
   return n;
+}
+
+/** Take an entry off the list; what was inside it moves up a level. */
+export function dropEntry(pc: PC, inv: InvItem): void {
+  for (const k of pc.items) {
+    if (!inv.id || k.in !== inv.id) continue;
+    if (inv.in) k.in = inv.in;
+    else delete k.in;
+  }
+  pc.items = pc.items.filter((i) => i !== inv);
 }

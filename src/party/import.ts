@@ -146,7 +146,7 @@ export function pcFromSheet(f: Record<string, string>, rules: PartyRules): Impor
   for (const line of clean(f["Tiny Items"]).split(/\n+/)) {
     const t = line.trim();
     if (!t) continue;
-    pc.items.push({
+    addItem(pc, {
       name: t,
       qty: 1,
       weight: enc.trinketWeight,

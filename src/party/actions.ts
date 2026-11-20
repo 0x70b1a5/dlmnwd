@@ -2,12 +2,15 @@
 // make. Each one changes the PC in place and throws an Error with a message for
 // the user when it can't. Pure: no Node APIs, no printing.
 
+import { COIN_CP } from "../rules.ts";
 import { pick } from "../util.ts";
 import {
   ABILITIES,
   type Ability,
+  COIN_KINDS,
   type CoinKind,
   type Coins,
+  emptyCoins,
   type KnownRune,
   type Party,
   type PC,
@@ -43,6 +46,93 @@ export function moveCoins(from: Coins, to: Coins, kind: CoinKind, n: number, who
   if (from[kind] < n) throw new Error(`${who} has only ${from[kind]}${kind} to move.`);
   from[kind] -= n;
   to[kind] += n;
+}
+
+/**
+ * Coins in, out or between purses: from `from` (null: from outside, found or
+ * paid) to `to` (null: spent or lost). Each kind is checked before any is
+ * moved. Returns the coins moved.
+ */
+export function shiftCoins(
+  n: Coins,
+  from: Coins | null,
+  to: Coins | null,
+  fromName = "the purse",
+): Coins {
+  const bad = COIN_KINDS.find((k) => !Number.isInteger(n[k]) || n[k] < 0);
+  if (bad) throw new Error("Coins are whole numbers, 0 or more.");
+  if (COIN_KINDS.every((k) => !n[k])) throw new Error("Give a number of coins.");
+  const short = from ? COIN_KINDS.filter((k) => n[k] > from[k]) : [];
+  if (from && short.length)
+    throw new Error(`Only ${short.map((k) => `${from[k]}${k}`).join(", ")} in ${fromName}.`);
+  for (const k of COIN_KINDS) {
+    if (from) from[k] -= n[k];
+    if (to) to[k] += n[k];
+  }
+  return n;
+}
+
+/** What a purse is worth, in copper. */
+export function worthCp(c: Coins): number {
+  return COIN_KINDS.reduce((n, k) => n + c[k] * COIN_CP[k], 0);
+}
+
+/** Copper's worth as the fewest coins, largest first (no platinum: change is
+ *  given in gold, silver and copper). */
+export function coinsFor(cp: number): Coins {
+  const out = emptyCoins();
+  let rest = Math.max(0, Math.round(cp));
+  for (const k of ["gp", "sp", "cp"] as const) {
+    out[k] = Math.floor(rest / COIN_CP[k]);
+    rest -= out[k] * COIN_CP[k];
+  }
+  return out;
+}
+
+/**
+ * Pay a price in copper from a purse. The smallest coins go first; when they
+ * don't make the price exactly, the smallest coin that covers the rest is
+ * broken and the change comes back in gold, silver and copper. Throws when the
+ * purse is short. Changes `purse`; returns what was paid and the change.
+ */
+export function payCoins(
+  purse: Coins,
+  cp: number,
+  who = "The purse",
+): { paid: Coins; change: Coins } {
+  const have = worthCp(purse);
+  if (have < cp)
+    throw new Error(
+      `That costs ${cpText(cp)}; ${who} hold${who.endsWith("s") ? "" : "s"} ${cpText(have)}.`,
+    );
+  const paid = emptyCoins();
+  let rest = cp;
+  const small = ["cp", "sp", "gp", "pp"] as const;
+  for (const k of small) {
+    const n = Math.min(purse[k], Math.floor(rest / COIN_CP[k]));
+    paid[k] += n;
+    rest -= n * COIN_CP[k];
+  }
+  let change = emptyCoins();
+  if (rest > 0) {
+    // Every kind with coins left is worth more than what is still owed.
+    const k = small.find((x) => purse[x] > paid[x])!;
+    paid[k] += 1;
+    change = coinsFor(COIN_CP[k] - rest);
+  }
+  for (const k of COIN_KINDS) purse[k] += change[k] - paid[k];
+  return { paid, change };
+}
+
+/** "12gp 5sp" for an amount in copper. */
+function cpText(cp: number): string {
+  const c = coinsFor(cp);
+  return (
+    (["gp", "sp", "cp"] as const)
+      .filter((k) => c[k])
+      .map((k) => `${c[k]}${k}`)
+      .join(" ") || "0cp"
+  );
 }
 
 /** Apply "-4" (damage), "+3" (heal), "=7" (set) or "max" to the PC's HP. */

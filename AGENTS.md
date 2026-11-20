@@ -245,6 +245,14 @@ the address until the book is read. Forget book goes back to the first state.
   `web/member-sheet.ts` turns a member into `SheetData` for the rules text and
   for "Print sheet", which prints a hidden copy of the whole sheet
   (`body[data-print="member"]` in `app.css`).
+  The gear table lists each place in turn (`placeGroups`): equipped, stowed,
+  each animal or vehicle, then stashed by where it is kept. An item in a
+  container is drawn one level in, under it. A row's grip drags it: drop it
+  between rows to reorder, on a row to put it inside, or on a heading to move
+  it there. The drag uses pointer events and `elementFromPoint`, and a draw
+  waits until the drag ends. Each move goes through `moveItem`, like the
+  "where" select on each row. Animals and vehicles have their own block: buy or
+  add one from the book's list, rename it, and set its load.
 - `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the
   wandering check, the turn clock (`src/turn-clock.ts`, the pure half of
   `src/turn.ts`) and a lookup in the saved book. It is built once; rolls only
@@ -275,7 +283,9 @@ code takes a `PartyRules` bundle (`rules.ts`) of book-derived tables
 (`book.ts` parses them; `build.ts` stores them in `lookup_tables`):
 `catalog` (`parse/gear.ts`: every item with a listed weight), `encumbrance`
 (weight/slot/basic tables, gear-slot examples), `runes` (`parse/rune.ts`),
-`prime_xp`/`kindred_xp` (`parse/xp.ts`), `glamours`, `knacks`. Class
+`prime_xp`/`kindred_xp` (`parse/xp.ts`), `glamours`, `knacks`, `transport`
+(`parse/transport.ts`: the animals and vehicles sold with a Load or Cargo
+column, found by the table header, not by name). Class
 advancement rows live on `ParsedClass.advancement`. Missing tables fall back to
 the generic defaults in `src/rules.ts`. Tests build `PartyRules` by hand with
 invented content (`test/party.test.ts`, `test/party-actions.test.ts`).
@@ -316,9 +326,21 @@ the coins left. `characterToPc` adds bought gear by its catalogue name.
 `web/shop.ts` is the shop above the generated sheet, and `dw new --buy` is the
 CLI's form. The shop closes when the character joins the party.
 
-An item is equipped, stowed or stashed (`Where`). Stashed gear is left behind:
-it stays on the list and counts for no weight, slots, AC or container room
-(`carriedItems`). An inventory entry can share its slots between units (`InvItem.per`, read by
+An item is equipped, stowed, loaded or stashed (`Where`). Stashed gear is left
+behind: it stays on the list and counts for no weight, slots, AC or container
+room (`carriedItems`). Loaded gear is `on` one of the member's animals or
+vehicles (`PC.carriers`), and counts toward that one's load, not the
+character's. `party/inventory.ts` (pure) holds the places. Each item and each
+carrier has an id. An item `in` a container goes where the container goes
+(`settle`): stowed inside a stowing container, else in the container's own
+place. `moveItem` refuses a cycle and a bulky item stowed, and takes an order
+(`At`). `tidyInventory` (run by `normalizeParty` and after each web change)
+gives ids and mends a dangling or cyclic `in` and a missing carrier. A
+container's room is its catalogue `capacity` in coins (a Capacity cell or "holds
+up to N coins" in its text). An animal carries its load at its Speed and
+`ANIMAL_LOAD.halfSpeedTimes` that load at half Speed. A vehicle's cargo is its
+limit. `buyItem` and `buyCarrier` pay with `payCoins` (`actions.ts`), which
+takes the smallest coins first and gives change. An inventory entry can share its slots between units (`InvItem.per`, read by
 `itemSlots`): loose ammunition packs like the bundles the same list sells
 (`slotStack`). A table entry that names another item for one size of character
 gives that item to a kindred of that size (`sizedOption`).

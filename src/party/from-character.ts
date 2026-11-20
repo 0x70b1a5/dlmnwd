@@ -4,6 +4,7 @@ import { type Character, purseCp, resolvedKindredTraits } from "../gen/character
 import { COIN_CP } from "../rules.ts";
 import { pick } from "../util.ts";
 import { computeAc } from "./encumbrance.ts";
+import { addCarrier } from "./inventory.ts";
 import { addItem, makeItem } from "./items.ts";
 import { blankPc, type PC } from "./model.ts";
 import type { PartyRules } from "./rules.ts";
@@ -47,8 +48,14 @@ export function characterToPc(c: Character, rules: PartyRules): PC {
     if (text.trim()) addItem(pc, makeItem(catalog, enc, text).inv);
   };
   if (c.bought) {
-    // Bought gear names the book's own entries: no text to take apart.
-    for (const b of c.bought) addItem(pc, makeItem(catalog, enc, b.name, { qty: b.qty }).inv);
+    // Bought gear names the book's own entries: no text to take apart. An
+    // animal or vehicle bought joins the member's list of them.
+    for (const b of c.bought) {
+      const t = rules.transport.find((x) => x.name === b.name);
+      if (t && !catalog.some((x) => x.name === b.name))
+        for (let n = 0; n < b.qty; n++) addCarrier(pc, t);
+      else addItem(pc, makeItem(catalog, enc, b.name, { qty: b.qty }).inv);
+    }
   } else {
     // "Leather armour + shield" → the armour and the shield.
     for (const part of c.loadout.armour.split(/\s*\+\s*/))
@@ -66,7 +73,7 @@ export function characterToPc(c: Character, rules: PartyRules): PC {
   const pool = rules.runes.runes.filter((r) => r.magnitude === magnitude);
   if (magnitude && pool.length > 0) grantRune(pc, pick(pool));
   if (c.trinket)
-    pc.items.push({
+    addItem(pc, {
       name: c.trinket,
       qty: 1,
       weight: enc.trinketWeight,

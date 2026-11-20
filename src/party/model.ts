@@ -5,9 +5,11 @@
 export const ABILITIES = ["str", "int", "wis", "dex", "con", "cha"] as const;
 export type Ability = (typeof ABILITIES)[number];
 
-/** Equipped and stowed gear is carried. Stashed gear is left somewhere safe
- *  (an inn, a camp, a cart): it stays on the list and weighs nothing. */
-export type Where = "equipped" | "stowed" | "stashed";
+/** Equipped and stowed gear is carried. Loaded gear is on one of the
+ *  member's animals or vehicles (`on`). Stashed gear is left somewhere safe
+ *  (an inn, a camp): it stays on the list and weighs nothing. */
+export type Where = "equipped" | "stowed" | "loaded" | "stashed";
+/** The places that need nothing more said: all but loaded, which names its carrier. */
 export const WHERES: readonly Where[] = ["equipped", "stowed", "stashed"];
 
 export interface InvItem {
@@ -27,6 +29,29 @@ export interface InvItem {
   treasure?: boolean;
   /** Bulky (two hands to carry): can't be stowed in a container. */
   bulky?: boolean;
+  note?: string;
+  /** Its id in the member's list ("i3"), for what goes inside it. */
+  id?: string;
+  /** The id of the item it is inside. */
+  in?: string;
+  /** Loaded: the id of the animal or vehicle it is on. */
+  on?: string;
+  /** Stashed: where it is kept ("at the inn"). */
+  kept?: string;
+}
+
+/** An animal or vehicle a member owns, to carry gear (party/inventory.ts). */
+export interface Carrier {
+  /** Its id in the member's list ("c1"); a loaded item names it in `on`. */
+  id: string;
+  /** What the player calls it: the book's name until they rename it. */
+  name: string;
+  /** The book's entry it is. */
+  type: string;
+  kind: "animal" | "vehicle";
+  /** Coins of weight it carries: an animal at its normal Speed, a vehicle at all. */
+  load: number;
+  speed?: number;
   note?: string;
 }
 
@@ -90,6 +115,8 @@ export interface PC {
   skills: Record<string, number>;
   languages: string[];
   items: InvItem[];
+  /** Animals and vehicles that carry the member's gear. */
+  carriers: Carrier[];
   coins: Coins;
   /** Coins held somewhere safe (not carried, no encumbrance). */
   banked: Coins;
@@ -153,6 +180,7 @@ export function blankPc(name: string): PC {
     skills: {},
     languages: [],
     items: [],
+    carriers: [],
     coins: emptyCoins(),
     banked: emptyCoins(),
     glamours: [],
@@ -210,11 +238,81 @@ export function normalizeParty(raw: unknown, source: string): Party {
   if (!Array.isArray(p.members)) throw new Error(`${source} has no members list.`);
   if (p.members.some((m) => !m || typeof m !== "object" || typeof m.name !== "string"))
     throw new Error(`${source} has a member without a name.`);
-  return {
-    ...freshParty(),
-    ...p,
-    members: p.members.map((m) => Object.assign(blankPc(m.name), m)),
+  const members = p.members.map((m) => Object.assign(blankPc(m.name), m));
+  for (const m of members) tidyInventory(m);
+  return { ...freshParty(), ...p, members };
+}
+
+/** A free id with this prefix ("i" for items, "c" for carriers). */
+export function freeId(taken: Set<string>, prefix: string): string {
+  let n = 1;
+  while (taken.has(`${prefix}${n}`)) n++;
+  taken.add(`${prefix}${n}`);
+  return `${prefix}${n}`;
+}
+
+/**
+ * Make a member's gear hang together: every item and carrier has its own id,
+ * an item is inside only an item that is there (and never inside itself), a
+ * loaded item names a carrier that is there, and what is inside a loaded or
+ * stashed item is in the same place. Older files gain ids. Changes `pc`.
+ */
+export function tidyInventory(pc: PC): void {
+  const cids = new Set<string>();
+  pc.carriers = (pc.carriers ?? []).filter((c) => c && typeof c === "object");
+  for (const c of pc.carriers) {
+    if (!c.id || cids.has(c.id)) c.id = freeId(cids, "c");
+    else cids.add(c.id);
+    c.name ||= c.type || "Animal";
+    c.load = Number(c.load) || 0;
+  }
+  const ids = new Set<string>();
+  for (const i of pc.items) {
+    if (!i.id || ids.has(i.id)) i.id = freeId(ids, "i");
+    else ids.add(i.id);
+  }
+  const byId = new Map(pc.items.map((i) => [i.id!, i]));
+  const holder = (i: InvItem): InvItem | undefined => (i.in ? byId.get(i.in) : undefined);
+  for (const i of pc.items) {
+    if (!i.in) continue;
+    // Up the chain: a missing holder or a loop takes it out.
+    const seen = new Set([i.id]);
+    for (let h = holder(i); h; h = holder(h)) {
+      if (seen.has(h.id)) {
+        delete i.in;
+        break;
+      }
+      seen.add(h.id);
+    }
+    if (i.in && !byId.has(i.in)) delete i.in;
+  }
+  for (const i of pc.items) {
+    if (i.in) continue;
+    if (i.where === "loaded" && !cids.has(i.on ?? "")) i.where = "stashed";
+    settleInside(pc, i);
+  }
+}
+
+/** Contents of a loaded or stashed item are on the same carrier or kept at the
+ *  same place; contents of a carried item are carried. */
+const off = (w: Where): boolean => w === "loaded" || w === "stashed";
+
+function settleInside(pc: PC, top: InvItem): void {
+  const walk = (i: InvItem): void => {
+    if (i !== top) {
+      if (off(top.where)) i.where = top.where;
+      else if (off(i.where)) i.where = "stowed";
+    }
+    if (i.where === "loaded") i.on = top.on;
+    else delete i.on;
+    if (i.where !== "stashed") delete i.kept;
+    else if (i !== top) {
+      if (top.kept) i.kept = top.kept;
+      else delete i.kept;
+    }
+    for (const k of pc.items) if (k.in === i.id && k !== top) walk(k);
   };
+  walk(top);
 }
 
 const plain = (m: PC): string => JSON.stringify({ ...m, updated: undefined });
