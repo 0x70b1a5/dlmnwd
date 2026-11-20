@@ -338,3 +338,54 @@ test("no offer when the bank is short too; the strip's error can be dismissed", 
   expect(root.querySelector(".strip-note")).toBeNull();
   expect(root.querySelector(".party-notes")!.textContent).not.toContain("That costs");
 });
+
+test("an item's edit line sells, splits, takes a note and duplicates", async () => {
+  await mount({
+    ...packer,
+    coins: { pp: 0, gp: 0, sp: 0, cp: 0 },
+    items: [packer.items[0], { ...packer.items[1], qty: 4, in: "i1", where: "stowed" }],
+  });
+  view.setRules(packRules);
+  type Row = { id: string; name: string; qty: number; in?: string; note?: string };
+  const rows = (name: string): Row[] => stored().items.filter((i: Row) => i.name === name);
+  const field = (label: string, v: string) => ((byLabel(label) as HTMLInputElement).value = v);
+  byLabel("Edit Thimble").click();
+  // Sell some of the stack: how many, and what the buyer pays.
+  byLabel("Sell Thimble").click();
+  expect(root.querySelector(".isell .hint")!.textContent).toContain("The book's price: 2 cp each.");
+  field("How many Thimble to sell", "2");
+  field("Paid for Thimble, sp", "1");
+  byLabel("Sell Thimble for this").click();
+  expect(rows("Thimble").map((i) => i.qty)).toEqual([2]);
+  expect(stored().coins.sp).toBe(1);
+  expect(root.querySelector(".isell")).toBeNull();
+  // Split the rest: a row for each, and the edit line stays open on the first.
+  byLabel("Split Thimble").click();
+  expect(rows("Thimble").map((i) => i.qty)).toEqual([1, 1]);
+  expect(byLabel("Split Thimble")).toBeUndefined();
+  // Note: the link gives a field, with the focus in it.
+  byLabel("Note on Thimble").click();
+  const note = root.querySelector<HTMLInputElement>("input.inote")!;
+  expect(document.activeElement).toBe(note);
+  note.value = "bent";
+  note.dispatchEvent(new Event("change", { bubbles: true }));
+  await settle();
+  expect(rows("Thimble").map((i) => i.note)).toEqual(["bent", undefined]);
+  // Duplicate the knapsack: a copy of it and of all that is in it.
+  byLabel("Edit Knapsack").click();
+  byLabel("Duplicate Knapsack").click();
+  expect(notes.at(-1)).toBe("Orla Venn duplicates Knapsack, and the 2 things in it");
+  const [k1, k2] = rows("Knapsack");
+  const inside = (k: Row) => rows("Thimble").filter((i) => i.in === k.id);
+  expect([inside(k1).length, inside(k2).length]).toEqual([2, 2]);
+  expect(inside(k2).map((i) => i.note)).toContain("bent");
+  // Sell a knapsack: what was in it stays, out of it.
+  byLabel("Sell Knapsack").click();
+  expect(byLabel("How many Knapsack to sell")).toBeUndefined();
+  field("Paid for Knapsack, gp", "2");
+  byLabel("Sell Knapsack for this").click();
+  expect(rows("Knapsack").map((i) => i.id)).toEqual([k2.id]);
+  expect(stored().coins).toMatchObject({ gp: 2, sp: 1 });
+  expect(rows("Thimble").filter((i) => !i.in)).toHaveLength(2);
+  expect(notes.at(-1)).toContain("what was in it stays");
+});

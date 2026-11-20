@@ -174,6 +174,8 @@ dw pc pip item rm rations 1
 dw pc pip stow longbow          # / equip
 dw pc pip stash tent --at=camp  # left behind: listed, but no weight or slots
 dw pc pip put rope in backpack  # it goes where the backpack goes
+dw pc pip sell rope for 3sp     # sell rations 2 for 1sp: some of a stack (coins go to those carried)
+dw pc pip split torches         # a row for each (duplicate <item>: a copy, with what is in it)
 dw pc pip buy lantern           # at the book's price, change given (--banked: from the bank)
 dw pc pip buy "<animal>"        # the book's animals and vehicles too (animal add: no payment)
 dw pc pip put tent on <animal>  # counts toward its load, not Pip's
@@ -233,7 +235,9 @@ itself, after the `#`, so no server gets it. The link is a copy: it does not
 follow later changes. The gear is listed by where it is: equipped, stowed, on each animal or
 vehicle, and stashed. Drag a row by its grip to reorder it, drop it on a
 container to put it inside, or drop it on a heading to move it there. The
-pencil on a row opens its edit line: where the item is, and Remove. Coins can be added, spent, banked and
+pencil on a row opens its edit line: where the item is, a note, Sell (for what
+the buyer pays), Split a stack into rows of one, Duplicate (with all that is in
+it) and Remove. Coins can be added, spent, banked and
 withdrawn, and Buy pays the book's price from the purse you chose (kept for
 each member). When the coins carried are short and the bank holds enough, the
 error offers to pay from the bank. The selected member shows

@@ -250,6 +250,8 @@ export function addItem(pc: PC, inv: InvItem): InvItem {
   return inv;
 }
 
+const HAND: Record<Where, number> = { equipped: 0, stowed: 1, loaded: 2, stashed: 3 };
+
 /** Find a carried item by name: exact, prefix, word-prefix, then substring. */
 export function findItem(pc: PC, query: string): InvItem {
   const q = norm(query);
@@ -267,9 +269,10 @@ export function findItem(pc: PC, query: string): InvItem {
   for (const hits of tiers) {
     if (hits.length === 1) return hits[0];
     if (hits.length > 1) {
-      // The same item in two places (or stacks) is one thing to the player.
+      // The same item in two places (or stacks) is one thing to the player:
+      // take the one at hand, in the order the sheet shows the places.
       if (hits.every((h) => h.name === hits[0].name || (h.ref && h.ref === hits[0].ref)))
-        return hits[0];
+        return hits.reduce((a, b) => (HAND[b.where] < HAND[a.where] ? b : a));
       throw new Error(
         `"${query}" matches ${hits.map((i) => i.name).join(", ")}; be more specific.`,
       );

@@ -2107,7 +2107,7 @@ ul.chips-list {
   width: 3.4rem;
 }
 .party .gear col.c-x {
-  width: 4.2rem;
+  width: 4.5rem;
 }
 .party .member .gear td,
 .party .member .gear th {
@@ -2165,6 +2165,39 @@ ul.chips-list {
 }
 .party .imeta input.kept {
   flex: 1 1 7rem;
+}
+.party .imeta input.inote {
+  flex: 1 1 9rem;
+  font-style: italic;
+}
+/* Sell: how many, and what the buyer pays, on a row under the item's. */
+.party .gear tr.editing:has(+ tr.sell-row) td {
+  border-bottom: 0;
+}
+.party .isell {
+  padding: 0 0 0.3rem 1.4rem;
+}
+.party .isell form.row {
+  gap: 0.3rem;
+}
+.party .isell__for {
+  font-size: 0.85rem;
+  font-style: normal;
+  color: var(--ink-soft);
+}
+.party .gear .isell input.cell {
+  width: 3.6rem;
+}
+/* Not the −1 button's fixed square: the words fit. */
+.party .gear .isell .btn.mini {
+  width: auto;
+  padding-left: 0.6rem;
+  padding-right: 0.6rem;
+}
+.party .isell .hint {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  font-style: normal;
 }
 .party .imeta .linkish {
   padding: 0.15rem 0;
@@ -2485,7 +2518,8 @@ body.dragging * {
   .party .gear tr.grp td {
     padding-top: 0.5rem;
   }
-  .party .imeta {
+  .party .imeta,
+  .party .isell {
     padding-left: 0.9rem;
   }
   /* The roster fits: a long name wraps. */

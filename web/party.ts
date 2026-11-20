@@ -33,6 +33,7 @@ import {
   buyItem,
   carrierLoad,
   carrierText,
+  duplicateItem,
   coinsLine,
   containerFill,
   contents,
@@ -45,6 +46,7 @@ import {
   keptText,
   keyText,
   moveItem,
+  noteItem,
   type PlaceGroup,
   placeGroups,
   placeKey,
@@ -52,6 +54,8 @@ import {
   type Purse,
   removeCarrier,
   type Row,
+  sellItem,
+  splitItem,
   within,
 } from "../src/party/inventory.ts";
 import { priceOf, priceText } from "../src/gen/shop.ts";
@@ -190,6 +194,9 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   const edits = new Set<string>();
   // The purse each member pays from, as last chosen in this browser.
   const payFrom = readPayFrom();
+  // Gear rows with the sell form open, and with a note field asked for.
+  const selling = new Set<string>();
+  const noting = new Set<string>();
 
   /** Run a change, save, and show its message (or its error). */
   // Undo: the party as it was before each recent change, newest last.
@@ -1384,6 +1391,20 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       for (const r of g.rows) {
         close(r.depth);
         body.push(itemRow(pc, r, measure));
+        // The sell form takes the whole width, on a row of its own.
+        const key = editKey(pc, r.item.id!);
+        if (edits.has(key) && selling.has(key))
+          body.push(
+            h(
+              "tr",
+              { class: "editing sell-row" },
+              h(
+                "td",
+                { class: "item", colspan: `${cols}`, style: `--depth:${r.depth}` },
+                sellForm(pc, r.item, key),
+              ),
+            ),
+          );
         if (contents(pc, r.item).length) boxes.push(r);
       }
       close(0);
@@ -1531,21 +1552,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
               `${fill.used.toLocaleString("en")} of ${amountText(fill.capacity, fill.unit)} in it`,
             )
           : null,
-        editing
-          ? h(
-              "div",
-              { class: "imeta" },
-              whereSelect(pc, it),
-              it.where === "stashed" && !it.in ? keptInput(pc, it) : null,
-              button(
-                "Remove",
-                () => act(() => (removeItem(pc, it), `${pc.name} drops ${it.name}`)),
-                "linkish",
-                "button",
-                `Remove all ${it.name}`,
-              ),
-            )
-          : null,
+        editing ? editLine(pc, it, key) : null,
       ),
       h("td", { class: "num" }, itemNum(pc, it, "qty", 0)),
       measure ? h("td", { class: "num" }, itemNum(pc, it, measure, 0)) : null,
@@ -1559,7 +1566,124 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           "button",
           `Remove one ${it.name}`,
         ),
-        editToggle(key, it.name, "where it is, or Remove"),
+        editToggle(key, it.name, "where it is, a note, Sell, Split, Duplicate or Remove"),
+      ),
+    );
+  }
+
+  /** A gear row's edit line: where it is, its note, and Sell, Split,
+   *  Duplicate and Remove. */
+  function editLine(pc: PC, it: InvItem, key: string): HTMLElement {
+    const noted = it.note !== undefined || noting.has(key);
+    const note = noted
+      ? textInput(it.note ?? "", (v) =>
+          act(() => {
+            noting.delete(key);
+            return noteItem(pc, it, v);
+          }),
+        )
+      : null;
+    if (note) {
+      note.placeholder = "note";
+      note.classList.add("inote");
+      note.setAttribute("aria-label", `Note on ${it.name}`);
+    }
+    const toggle = (set: Set<string>) => (): void => {
+      if (!set.delete(key)) set.add(key);
+      render();
+      if (set === noting && noting.has(key))
+        [...root.querySelectorAll<HTMLInputElement>("input.inote")]
+          .find((el) => el.getAttribute("aria-label") === `Note on ${it.name}`)
+          ?.focus();
+    };
+    return h(
+      "div",
+      { class: "imeta" },
+      whereSelect(pc, it),
+      it.where === "stashed" && !it.in ? keptInput(pc, it) : null,
+      note,
+      linkButton(
+        "Sell",
+        toggle(selling),
+        "Sell some or all, for what the buyer pays",
+        `Sell ${it.name}`,
+      ),
+      it.qty > 1 && (it.per ?? 1) <= 1
+        ? linkButton(
+            "Split",
+            () => act(() => splitItem(pc, it)),
+            `A row of one for each of the ${it.qty}`,
+            `Split ${it.name}`,
+          )
+        : null,
+      linkButton(
+        "Duplicate",
+        () => act(() => duplicateItem(pc, it)),
+        `Another row just like it${contents(pc, it).length ? ", with everything in it" : ""}`,
+        `Duplicate ${it.name}`,
+      ),
+      noted ? null : linkButton("Note", toggle(noting), "A note on this row", `Note on ${it.name}`),
+      linkButton(
+        "Remove",
+        () => act(() => (removeItem(pc, it), `${pc.name} drops ${it.name}`)),
+        "Take it off the list (Undo brings it back)",
+        `Remove all ${it.name}`,
+      ),
+    );
+  }
+
+  /** Sell some or all of a row for what the buyer pays, in gold, silver and
+   *  copper, into the coins carried. */
+  function sellForm(pc: PC, it: InvItem, key: string): HTMLElement {
+    const qty =
+      it.qty > 1
+        ? numInput(`${it.qty}`, {
+            min: "1",
+            max: `${it.qty}`,
+            class: "cell",
+            "aria-label": `How many ${it.name} to sell`,
+          })
+        : null;
+    const kinds = ["gp", "sp", "cp"] as const;
+    const paid = kinds.map((k) =>
+      numInput("", {
+        min: "0",
+        class: "cell",
+        placeholder: k,
+        "aria-label": `Paid for ${it.name}, ${k}`,
+      }),
+    );
+    const listed = rules.catalog.find((c) => c.name === it.ref);
+    const price = priceOf(listed?.cost);
+    const f = form(
+      () =>
+        act(() => {
+          const got = emptyCoins();
+          kinds.forEach((k, i) => {
+            const v = paid[i].value.trim();
+            got[k] = v === "" ? 0 : Number(v);
+          });
+          const n = qty ? Number(qty.value) : undefined;
+          const line = sellItem(pc, it, got, n);
+          selling.delete(key);
+          return line;
+        }),
+      qty,
+      h("span", { class: "isell__for" }, "for"),
+      ...paid,
+      button("Sell", null, "btn mini accent", "submit", `Sell ${it.name} for this`),
+      button("Cancel", () => (selling.delete(key), render()), "btn mini", "button", "Do not sell"),
+    );
+    f.classList.add("sell");
+    return h(
+      "div",
+      { class: "isell" },
+      f,
+      h(
+        "p",
+        { class: "hint" },
+        price ? `The book's price: ${priceText(price)}${price.units > 1 ? "" : " each"}. ` : "",
+        "The coins go to those carried.",
       ),
     );
   }
@@ -2520,10 +2644,16 @@ function markDrop(t: Drop | null, shown: boolean): void {
   else t.el.style.removeProperty("--drop-depth");
 }
 
-/** "LAND CARTS" → "Land carts". */
 /** The button of a message's offer (`Message.offer`). */
 function offerButton(o: Offer): HTMLElement {
   return button(o.label, o.run, "btn mini accent offer");
+}
+
+/** A link-like button on an edit line, with a title that says what it does. */
+function linkButton(label: string, run: () => void, title: string, aria: string): HTMLElement {
+  const b = button(label, run, "linkish", "button", aria);
+  b.title = title;
+  return b;
 }
 
 const PAY_KEY = "dlmnwd:pay-from";
@@ -2553,6 +2683,7 @@ function storePayFrom(pay: Record<string, Purse>): void {
 /** A gear row's or an animal's key in the set of those open for editing. */
 const editKey = (pc: PC, id: string): string => `${pc.name}\n${id}`;
 
+/** "LAND CARTS" → "Land carts". */
 const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
 function printable(data: SheetData): HTMLElement {

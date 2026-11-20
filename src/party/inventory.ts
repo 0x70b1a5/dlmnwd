@@ -9,7 +9,7 @@ import type { CatalogItem, EncumbranceRules } from "../parse/gear.ts";
 import type { Transport } from "../parse/transport.ts";
 import { ANIMAL_LOAD } from "../rules.ts";
 import { payCoins } from "./actions.ts";
-import { addItem, makeItem } from "./items.ts";
+import { addItem, makeItem, removeItem } from "./items.ts";
 import {
   type Carrier,
   COIN_KINDS,
@@ -489,4 +489,83 @@ export function transportForSale(list: Transport[]): CatalogItem[] {
       cost: t.cost,
       capacity: t.load,
     }));
+}
+
+// ── Sell, split, duplicate ────────────────────────────────────────────────
+
+/** The most rows Split makes at once. */
+export const SPLIT_MAX = 100;
+
+/**
+ * Sell `qty` of an item (all of it when omitted) for what the buyer pays,
+ * into the coins carried. The book gives no rate to sell at: the referee says
+ * what it fetches. What was inside a row that goes stays, one level up.
+ */
+export function sellItem(pc: PC, item: InvItem, got: Coins, qty?: number): string {
+  if (qty !== undefined && !(Number.isInteger(qty) && qty >= 1))
+    throw new Error("Sell one or more.");
+  if (COIN_KINDS.some((k) => !(Number.isInteger(got[k]) && got[k] >= 0)))
+    throw new Error("What the buyer pays is whole coins, none less than 0.");
+  if (qty !== undefined && qty > item.qty)
+    throw new Error(
+      `There ${item.qty === 1 ? "is" : "are"} only ${item.qty} × ${item.name} to sell.`,
+    );
+  const n = qty ?? item.qty;
+  // A row that goes leaves what was in it where the row was.
+  const out =
+    n === item.qty && contents(pc, item).length
+      ? `; what was in it stays, ${placeText(pc, item)}`
+      : "";
+  for (const k of COIN_KINDS) pc.coins[k] += got[k];
+  removeItem(pc, item, n);
+  return `${pc.name} sells ${n} × ${item.name} for ${coinsLine(got)}${out}`;
+}
+
+/** A stack becomes rows of one: the item itself is the first, and the others
+ *  come right after it. What is inside it stays in the first. */
+export function splitItem(pc: PC, item: InvItem): string {
+  const q = item.qty;
+  if (q < 2) throw new Error(`There is only one ${item.name}.`);
+  if ((item.per ?? 1) > 1)
+    throw new Error(`${item.name} share their slots as one stack, so they are not split.`);
+  if (q > SPLIT_MAX) throw new Error(`Split makes a row for each one: ${SPLIT_MAX} at most.`);
+  const taken = new Set(pc.items.flatMap((i) => (i.id ? [i.id] : [])));
+  item.qty = 1;
+  const rows = Array.from({ length: q - 1 }, () => ({
+    ...structuredClone(item),
+    id: freeId(taken, "i"),
+  }));
+  pc.items.splice(pc.items.indexOf(item) + 1, 0, ...rows);
+  return `${pc.name} splits ${q} × ${item.name} into ${q} rows of one`;
+}
+
+/** Another row just like an item, right after it, with a copy of everything
+ *  inside it. */
+export function duplicateItem(pc: PC, item: InvItem): string {
+  const taken = new Set(pc.items.flatMap((i) => (i.id ? [i.id] : [])));
+  const ids = new Map<string, string>();
+  const copy = (o: InvItem): InvItem => {
+    const c = structuredClone(o);
+    c.id = freeId(taken, "i");
+    if (o.id) ids.set(o.id, c.id);
+    return c;
+  };
+  const below = within(pc, item);
+  const top = copy(item);
+  const inside = pc.items.filter((o) => o !== item && below.has(o)).map(copy);
+  for (const c of inside) if (c.in) c.in = ids.get(c.in) ?? c.in;
+  pc.items.splice(pc.items.indexOf(item) + 1, 0, top, ...inside);
+  const what = item.qty > 1 ? `${item.qty} × ${item.name}` : item.name;
+  const more = inside.length
+    ? `, and the ${inside.length === 1 ? "one thing" : `${inside.length} things`} in it`
+    : "";
+  return `${pc.name} duplicates ${what}${more}`;
+}
+
+/** Set or clear an item's note. */
+export function noteItem(pc: PC, item: InvItem, text: string): string {
+  const t = text.trim();
+  if (t) item.note = t;
+  else delete item.note;
+  return t ? `${pc.name}: ${item.name} (${t})` : `${pc.name}: ${item.name}, no note`;
 }

@@ -255,8 +255,10 @@ the address until the book is read. Forget book goes back to the first state.
   it there. The drag uses pointer events and `elementFromPoint`, and a draw
   waits until the drag ends. A row shows the name, the quantity, the weight
   or slots, −1 and a pencil. The pencil opens the row's edit line (`edits`):
-  where the item is, where it is kept, and Remove. Each move goes through
-  `moveItem`. Animals and vehicles have their own block in the same idiom:
+  where the item is, where it is kept, its note, then Sell, Split, Duplicate
+  and Remove. Each move goes through `moveItem`. Sell opens a form under the
+  line (`selling`): how many, and what the buyer pays in gp, sp and cp. The
+  book's price shows as a hint, as the book gives no rate to sell at. Animals and vehicles have their own block in the same idiom:
   buy or add one from the book's list; its pencil renames it, sets its load
   or removes it. The gear, coin and roster tables fit a phone's width with
   no sideways scroll: fixed number columns, names that wrap (two lines, all
@@ -349,7 +351,11 @@ character's. `party/inventory.ts` (pure) holds the places. Each item and each
 carrier has an id. An item `in` a container goes where the container goes
 (`settle`): stowed inside a stowing container, else in the container's own
 place. `moveItem` refuses a cycle and a bulky item stowed, and takes an order
-(`At`). `tidyInventory` (run by `normalizeParty` and after each web change)
+(`At`). `sellItem` puts the coins paid with those carried, and what was in a
+row that goes stays one level up. `splitItem` makes rows of one (not a stack
+with `per`). `duplicateItem` copies a row and all that is in it, with new ids.
+When a name is on two rows, `findItem` takes the one at hand: equipped,
+stowed, loaded, then stashed. `tidyInventory` (run by `normalizeParty` and after each web change)
 gives ids and mends a dangling or cyclic `in` and a missing carrier. A
 container's room is its catalogue `capacity` in coins (a Capacity cell or "holds
 up to N coins" in its text). An animal carries its load at its Speed and

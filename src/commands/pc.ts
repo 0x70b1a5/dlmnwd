@@ -23,13 +23,17 @@ import {
   carrierText,
   findCarrier,
   findTransport,
+  duplicateItem,
   moveItem,
   type Purse,
   placeText,
   removeCarrier,
+  sellItem,
+  splitItem,
 } from "../party/inventory.ts";
 import { addItem, findItem, makeItem, removeItem, resolveItem, slotCost } from "../party/items.ts";
 import { firstName } from "../party/import.ts";
+import { emptyCoins } from "../party/model.ts";
 import { formatCoins, loadOf, pcMarkdown, showParty, showPc } from "../party/render.ts";
 import { classOf, type PartyRules } from "../party/rules.ts";
 import { grantRune, lookupRune, rollRuneGrant, runeStatus, useRune } from "../party/runes.ts";
@@ -116,6 +120,10 @@ const USAGE = `usage: dw pc <name> [command]      (name: any unambiguous part of
                                    --treasure, --as="Label" to keep your own name)
   item rm <item> [qty]           drop some or all of an item
   item set <item> k=v…           weight=, slots=, qty=, name=, note=, treasure=yes|no
+  sell <item> [qty] for <N(cp|sp|gp|pp)>…
+                                 the coins go to those carried; what was in it stays
+  split <item>                   a stack becomes rows of one
+  duplicate <item>               another row like it, with a copy of what is in it
   equip|stow <item>              move an item to equipped or stowed (out of any container)
   stash <item> [--at="the inn"]  leave an item behind; --at says where it is kept
   put <item> in <container>      put an item inside another (it goes where that goes)
@@ -204,6 +212,11 @@ export function cmdPc(args: string[]): void {
     case "item":
     case "items":
       return itemCmd(pc, party, rules, rest, args);
+    case "sell":
+    case "split":
+    case "dup":
+    case "duplicate":
+      return itemCmd(pc, party, rules, [verb, ...rest], args);
 
     case "equip":
     case "stow":
@@ -489,6 +502,42 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
       reportLoad(pc, party, rules, before);
       return;
     }
+    case "sell": {
+      // sell <item> [qty] for <N(cp|sp|gp|pp)>…
+      const k = words.indexOf("for");
+      if (k < 1)
+        throw new Error(
+          "usage: dw pc <name> sell <item> [qty] for <N(cp|sp|gp|pp)>…  (for 0cp: no coins)",
+        );
+      const what = words.slice(0, k);
+      let qty: number | undefined;
+      if (what.length > 1 && /^\d+$/.test(what.at(-1)!)) qty = parseInt(what.pop()!, 10);
+      const got = emptyCoins();
+      for (const spec of words.slice(k + 1)) {
+        const { kind, n } = coinSpec(spec);
+        got[kind] += n;
+      }
+      const line = sellItem(pc, findItem(pc, what.join(" ")), got, qty);
+      saveParty(party);
+      console.log(line);
+      console.log(`  ${formatCoins(pc.coins)} carried`);
+      reportLoad(pc, party, rules, before);
+      return;
+    }
+    case "split": {
+      const line = splitItem(pc, findItem(pc, words.join(" ")));
+      saveParty(party);
+      console.log(line);
+      return;
+    }
+    case "dup":
+    case "duplicate": {
+      const line = duplicateItem(pc, findItem(pc, words.join(" ")));
+      saveParty(party);
+      console.log(line);
+      reportLoad(pc, party, rules, before);
+      return;
+    }
     case "set": {
       const kvs = words.filter((w) => /^[a-z_]+=/.test(w));
       const inv = findItem(pc, words.filter((w) => !kvs.includes(w)).join(" "));
@@ -522,7 +571,7 @@ function itemCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
       return;
     }
     default:
-      throw new Error(`Unknown item command "${op}" (add, rm, set).`);
+      throw new Error(`Unknown item command "${op}" (add, rm, set, sell, split, duplicate).`);
   }
 }
 

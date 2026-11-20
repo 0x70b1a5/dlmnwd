@@ -11,16 +11,20 @@ import {
   carrierText,
   containerFill,
   destOf,
+  duplicateItem,
   findCarrier,
   holdersFor,
   keptText,
   moveItem,
+  noteItem,
   placeGroups,
   placeText,
   removeCarrier,
+  sellItem,
   shopCatalog,
+  splitItem,
 } from "../src/party/inventory.ts";
-import { addItem, makeItem, removeItem } from "../src/party/items.ts";
+import { addItem, findItem, makeItem, removeItem } from "../src/party/items.ts";
 import { partyDiff } from "../src/party/diff.ts";
 import {
   blankPc,
@@ -385,4 +389,97 @@ test('a place where gear is kept reads after "stashed", and a carrier shows its 
   expect(placeText(pc, by(pc, "Thimble"))).toBe("stashed at the mill");
   expect(carrierText(addCarrier(pc, beasts[0]))).toBe("Marsh pony");
   expect(carrierText(addCarrier(pc, beasts[0], "Bramble"))).toBe("Bramble (Marsh pony)");
+});
+
+const paid = (c: Partial<Record<"gp" | "sp" | "cp", number>>) => ({ ...emptyCoins(), ...c });
+
+test("selling puts what the buyer pays with the coins carried, and can sell some of a stack", () => {
+  const pc = member();
+  pc.coins.sp = 2;
+  by(pc, "Thimble").qty = 4;
+  expect(sellItem(pc, by(pc, "Thimble"), paid({ sp: 1, cp: 3 }), 3)).toBe(
+    "Orla Venn sells 3 × Thimble for 1sp 3cp",
+  );
+  expect(by(pc, "Thimble").qty).toBe(1);
+  expect(pc.coins).toMatchObject({ sp: 3, cp: 3 });
+  expect(pc.banked.sp).toBe(0);
+  expect(() => sellItem(pc, by(pc, "Thimble"), paid({}), 2)).toThrow("only 1 × Thimble");
+  expect(() => sellItem(pc, by(pc, "Thimble"), paid({ gp: 1.5 }))).toThrow("whole coins");
+  expect(() => sellItem(pc, by(pc, "Thimble"), paid({ cp: -1 }))).toThrow("whole coins");
+  expect(pc.coins).toMatchObject({ sp: 3, cp: 3 });
+});
+
+test("a container sold leaves what was in it where it was", () => {
+  const pc = member();
+  const r = rules();
+  moveItem(pc, by(pc, "Hip purse"), { in: by(pc, "Knapsack").id! }, r.enc);
+  moveItem(pc, by(pc, "Thimble"), { in: by(pc, "Hip purse").id! }, r.enc);
+  expect(sellItem(pc, by(pc, "Hip purse"), paid({ gp: 1 }))).toBe(
+    "Orla Venn sells 1 × Hip purse for 1gp; what was in it stays, in the Knapsack",
+  );
+  expect(pc.items.some((i) => i.name === "Hip purse")).toBe(false);
+  expect(by(pc, "Thimble").in).toBe(by(pc, "Knapsack").id);
+  expect(pc.coins.gp).toBe(1);
+});
+
+test("a split makes rows of one, each with its own id, right after the first", () => {
+  const pc = member();
+  const r = rules();
+  by(pc, "Thimble").qty = 3;
+  by(pc, "Thimble").note = "bent";
+  moveItem(pc, by(pc, "Hip purse"), { in: by(pc, "Knapsack").id! }, r.enc);
+  const first = by(pc, "Thimble");
+  expect(splitItem(pc, first)).toBe("Orla Venn splits 3 × Thimble into 3 rows of one");
+  const rows = pc.items.filter((i) => i.name === "Thimble");
+  expect(rows.map((i) => i.qty)).toEqual([1, 1, 1]);
+  expect(rows.every((i) => i.note === "bent" && i.where === first.where)).toBe(true);
+  expect(new Set(pc.items.map((i) => i.id)).size).toBe(pc.items.length);
+  const at = pc.items.indexOf(first);
+  expect(pc.items.slice(at, at + 3)).toEqual(rows);
+  expect(() => splitItem(pc, first)).toThrow("only one Thimble");
+  // A stack that packs its units into shared slots stays one row.
+  const wicks = addItem(pc, { ...makeItem(r.catalog, r.enc, "Wicks").inv, qty: 6, per: 3 });
+  expect(() => splitItem(pc, wicks)).toThrow("not split");
+  expect(wicks.qty).toBe(6);
+});
+
+test("a duplicate copies a container with all that is in it, under new ids", () => {
+  const pc = member();
+  const r = rules();
+  moveItem(pc, by(pc, "Hip purse"), { in: by(pc, "Knapsack").id! }, r.enc);
+  moveItem(pc, by(pc, "Thimble"), { in: by(pc, "Hip purse").id! }, r.enc);
+  const [k1, p1, t1] = ["Knapsack", "Hip purse", "Thimble"].map((n) => by(pc, n));
+  expect(duplicateItem(pc, k1)).toBe("Orla Venn duplicates Knapsack, and the 2 things in it");
+  expect(new Set(pc.items.map((i) => i.id)).size).toBe(pc.items.length);
+  const other = (n: string) => pc.items.find((i) => i.name === n && ![k1, p1, t1].includes(i))!;
+  const [k2, p2, t2] = ["Knapsack", "Hip purse", "Thimble"].map(other);
+  expect([p1.in, p2.in]).toEqual([k1.id, k2.id]);
+  expect([t1.in, t2.in]).toEqual([p1.id, p2.id]);
+  // The copies come right after the original.
+  expect(pc.items.slice(0, 4)).toEqual([k1, k2, p2, t2]);
+  expect(shown(pc)).toContain(
+    "stowed: Knapsack, ·Hip purse, ··Thimble, Knapsack, ·Hip purse, ··Thimble, Cord (40′ long)",
+  );
+  expect(duplicateItem(pc, by(pc, "Greatmaul"))).toBe("Orla Venn duplicates Greatmaul");
+});
+
+test("a note is set, and an empty one clears it", () => {
+  const pc = member();
+  expect(noteItem(pc, by(pc, "Cord (40′ long)"), "  knotted ")).toBe(
+    "Orla Venn: Cord (40′ long) (knotted)",
+  );
+  expect(by(pc, "Cord (40′ long)").note).toBe("knotted");
+  expect(noteItem(pc, by(pc, "Cord (40′ long)"), "")).toBe("Orla Venn: Cord (40′ long), no note");
+  expect("note" in by(pc, "Cord (40′ long)")).toBe(false);
+});
+
+test("a name on two rows finds the one at hand: equipped, stowed, loaded, then stashed", () => {
+  const pc = member();
+  const r = rules();
+  duplicateItem(pc, by(pc, "Thimble"));
+  const [a, b] = pc.items.filter((i) => i.name === "Thimble");
+  moveItem(pc, a, { where: "stashed" }, r.enc);
+  expect(findItem(pc, "thimble")).toBe(b);
+  moveItem(pc, a, { where: "equipped" }, r.enc);
+  expect(findItem(pc, "thimble")).toBe(a);
 });
