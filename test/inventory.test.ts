@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CatalogItem } from "../src/parse/gear.ts";
 import type { Transport } from "../src/parse/transport.ts";
-import { coinsFor, payCoins, shiftCoins, worthCp } from "../src/party/actions.ts";
+import { coinsFor, payCoins, shiftCoins, ShortOfCoins, worthCp } from "../src/party/actions.ts";
 import { computeLoad, itemsWeight } from "../src/party/encumbrance.ts";
 import {
   addCarrier,
@@ -273,6 +273,12 @@ test("paying takes the smallest coins first and gives change in gold, silver, co
     paid.cp + paid.sp * 10 + paid.gp * 100 - (change.cp + change.sp * 10 + change.gp * 100),
   ).toBe(157);
   expect(() => payCoins({ ...emptyCoins(), gp: 1 }, 101)).toThrow("holds 1gp");
+  try {
+    payCoins({ ...emptyCoins(), gp: 1 }, 101);
+  } catch (err) {
+    expect(err).toBeInstanceOf(ShortOfCoins);
+    expect((err as ShortOfCoins).cp).toBe(101);
+  }
   expect(coinsFor(1234)).toEqual({ pp: 0, gp: 12, sp: 3, cp: 4 });
 });
 

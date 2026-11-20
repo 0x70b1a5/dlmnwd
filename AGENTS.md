@@ -258,6 +258,13 @@ the address until the book is read. Forget book goes back to the first state.
   or removes it. The gear, coin and roster tables fit a phone's width with
   no sideways scroll: fixed number columns, names that wrap (two lines, all
   of them while open), and smaller cells under a 340px container.
+  `act` takes an `offer`: it reads the error after the roll back and can give
+  the message a button that makes the change another way. A buy with too few
+  coins carried (`ShortOfCoins`, from `payCoins`) offers the bank when it holds
+  enough (`buyFrom`). The CLI says the same with `--banked`. On a narrow screen
+  the last error shows in the sticky strip (`stripNote`), not at the top. The
+  "Pay from" choice is kept for each member in local storage
+  (`dlmnwd:pay-from`).
 - `web/table.ts` is the Table tab: dice, reaction, morale, initiative, the
   wandering check, the turn clock (`src/turn-clock.ts`, the pure half of
   `src/turn.ts`) and a lookup in the saved book. It is built once; rolls only

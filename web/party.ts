@@ -22,6 +22,7 @@ import {
   newDay,
   setField,
   shiftCoins,
+  ShortOfCoins,
   worthCp,
 } from "../src/party/actions.ts";
 import {
@@ -132,7 +133,14 @@ export interface PartyView {
 }
 
 /** A note under the party bar; `details` lists what a change found on the way. */
-type Message = { text: string; kind: "info" | "error"; details?: string[] };
+type Message = {
+  text: string;
+  kind: "info" | "error";
+  details?: string[];
+  /** A button that offers another way to make the change that failed. */
+  offer?: Offer;
+};
+type Offer = { label: string; run: () => void };
 
 /** Chat apps and mail cut links longer than about this. */
 const LONG_LINK = 6000;
@@ -180,6 +188,8 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   const open = new Set<string>();
   // The gear rows and animals open for editing (the pencil), by member and id.
   const edits = new Set<string>();
+  // The purse each member pays from, as last chosen in this browser.
+  const payFrom = readPayFrom();
 
   /** Run a change, save, and show its message (or its error). */
   // Undo: the party as it was before each recent change, newest last.
@@ -187,8 +197,12 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
   const HISTORY = 30;
 
   /** Run a change, save, and show its message (or its error). A change that
-   *  fails is rolled back, so a half-made change never stays. */
-  function act(change: () => string | Message | void): void {
+   *  fails is rolled back, so a half-made change never stays. `offer` reads the
+   *  error, after the roll back, and can give a button that tries another way. */
+  function act(
+    change: () => string | Message | void,
+    offer?: (err: Error) => Offer | undefined,
+  ): void {
     const before = JSON.stringify(party);
     const wasSelected = selected;
     try {
@@ -210,7 +224,7 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     } catch (err) {
       party = normalizeParty(JSON.parse(before), "The party");
       selected = wasSelected;
-      message = { text: (err as Error).message, kind: "error" };
+      message = { text: (err as Error).message, kind: "error", offer: offer?.(err as Error) };
     }
     if (message) hooks.onNote?.(clip(message.text, 160), message.kind);
     render();
@@ -285,7 +299,19 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       "div",
       { class: "party-notes", role: "status", "aria-live": "polite" },
       ...notes.flatMap((n) => [
-        h("p", { class: "status", "data-kind": n.kind }, n.text),
+        h(
+          "p",
+          {
+            // On a phone the strip shows the error instead (stripNote).
+            class:
+              n === message && n.kind === "error" && party.members[selected]
+                ? "status in-strip"
+                : "status",
+            "data-kind": n.kind,
+          },
+          n.text,
+          n.offer ? offerButton(n.offer) : null,
+        ),
         n.details?.length
           ? h("ul", { class: "plain status-details" }, ...n.details.map((d) => h("li", {}, d)))
           : null,
@@ -754,6 +780,79 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
           h("div", i === 3 ? { class: "cells__first-save" } : {}, h("dt", {}, k), h("dd", {}, v)),
         ),
       ),
+      stripNote(),
+    );
+  }
+
+  /** The last change's error in the strip, which stays in view as the page
+   *  scrolls. Only a narrow screen shows it (app.css); a wide one shows the
+   *  status line at the top. */
+  function stripNote(): HTMLElement | null {
+    if (message?.kind !== "error") return null;
+    return h(
+      "p",
+      { class: "strip-note status", "data-kind": "error", role: "alert" },
+      h("span", {}, message.text),
+      message.offer ? offerButton(message.offer) : null,
+      button(
+        "×",
+        () => {
+          message = null;
+          render();
+        },
+        "btn mini",
+        "button",
+        "Dismiss the error",
+      ),
+    );
+  }
+
+  /** The purse a member pays from: the one last chosen, while it holds anything. */
+  function payOf(pc: PC): Purse {
+    return payFrom[pc.name] === "banked" && worthCp(pc.banked) > 0 ? "banked" : "coins";
+  }
+
+  /** "Pay from" for a member with coins in the bank. The choice is kept. */
+  function purseSelect(pc: PC): HTMLSelectElement | null {
+    if (worthCp(pc.banked) === 0) return null;
+    const el = select(
+      [
+        ["coins", "pay from carried"],
+        ["banked", "pay from banked"],
+      ],
+      payOf(pc),
+      (v) => {
+        payFrom[pc.name] = v as Purse;
+        storePayFrom(payFrom);
+        render();
+      },
+    );
+    el.setAttribute("aria-label", "Pay from");
+    return el;
+  }
+
+  /**
+   * Buy for the selected member from a purse. When the coins carried are too
+   * few and the bank holds enough, the error offers to pay from the bank. The
+   * party is rolled back after an error, so `buy` gets the member to change.
+   */
+  function buyFrom(from: Purse, buy: (pc: PC, from: Purse) => string, formClass: string): void {
+    const who = party.members[selected].name;
+    act(
+      () => buy(party.members[selected], from),
+      (err) => {
+        const pc = party.members.find((m) => m.name === who);
+        if (!(err instanceof ShortOfCoins) || from !== "coins" || !pc) return undefined;
+        if (worthCp(pc.banked) < err.cp) return undefined;
+        return {
+          label: `Pay ${coinsLine(coinsFor(err.cp))} from the bank`,
+          run: () => {
+            // The form's fields are spent, as when its own button worked.
+            used = root.querySelector(`form.${formClass}`);
+            buyFrom("banked", buy, formClass);
+          },
+        };
+      },
     );
   }
 
@@ -1540,28 +1639,35 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
     const names = [
       ...new Set([...rules.catalog.map((c) => c.name), ...rules.transport.map((t) => t.name)]),
     ];
-    const add = (buying: boolean): void =>
+    const add = (buying: boolean): void => {
+      const text = name.value.trim();
+      const n = qty.value ? parseInt(qty.value, 10) : undefined;
+      const to = where.value ? destOf(where.value) : undefined;
+      // An animal or vehicle named here joins the list of them.
+      const found = rules.transport.find((x) => x.name.toLowerCase() === text.toLowerCase());
+      const t = found && !resolveItem(rules.catalog, text).item ? found : undefined;
+      if (buying)
+        return buyFrom(
+          (purse?.value as Purse | undefined) ?? payOf(pc),
+          (m, from) => {
+            if (!text) throw new Error("Name the item to buy.");
+            if (t) return buyCarrier(m, t, { purse: from }).line;
+            return buyItem(m, rules, text, { qty: n, to, purse: from }).line;
+          },
+          "add-item",
+        );
       act(() => {
-        const text = name.value.trim();
         if (!text) throw new Error("Name the item to add.");
-        const n = qty.value ? parseInt(qty.value, 10) : undefined;
-        const to = where.value ? destOf(where.value) : undefined;
-        const from = (purse?.value as Purse | undefined) ?? "coins";
-        // An animal or vehicle named here joins the list of them.
-        const t = rules.transport.find((x) => x.name.toLowerCase() === text.toLowerCase());
-        if (t && !resolveItem(rules.catalog, text).item) {
-          if (buying) return buyCarrier(pc, t, { purse: from }).line;
-          return `${pc.name} +${carrierText(addCarrier(pc, t))}`;
-        }
-        if (buying) return buyItem(pc, rules, text, { qty: n, to, purse: from }).line;
+        if (t) return `${pc.name} +${carrierText(addCarrier(pc, t))}`;
         const { inv, resolved } = makeItem(rules.catalog, rules.enc, text, { qty: n });
         if (to) moveItem(pc, inv, to, rules.enc);
         const stacked = addItem(pc, inv);
-        const found = resolved.item
+        const said = resolved.item
           ? `${resolved.item.name}: ${inv.weight} coins${inv.qty > 1 ? " each" : ""}, ${plural(inv.slots, "slot")}`
           : `not in the book's lists: weight ${inv.weight}, set it in the table`;
-        return `${pc.name} +${inv.qty} ${inv.name} → ${placeText(pc, stacked)} [${found}]${stacked.qty !== inv.qty ? ` (now ×${stacked.qty})` : ""}`;
+        return `${pc.name} +${inv.qty} ${inv.name} → ${placeText(pc, stacked)} [${said}]${stacked.qty !== inv.qty ? ` (now ×${stacked.qty})` : ""}`;
       });
+    };
     const f = form(
       () => add(false),
       name,
@@ -1608,11 +1714,20 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
         h(
           "div",
           { class: "cline" },
-          h("b", {}, c.name),
-          h("span", { class: "facts" }, facts.join(" · ")),
-          l.state !== "normal"
-            ? h("span", { class: `load ${l.state}` }, l.state === "slow" ? "half Speed" : "over")
-            : null,
+          h(
+            "span",
+            { class: "cwho" },
+            h("b", {}, c.name),
+            " ",
+            h("span", { class: "facts" }, facts.join(" · ")),
+            l.state !== "normal"
+              ? h(
+                  "span",
+                  { class: `load ${l.state}` },
+                  l.state === "slow" ? " half Speed" : " over",
+                )
+              : null,
+          ),
           editToggle(key, c.name, "its name, its load, or Remove"),
         ),
         editing
@@ -1669,16 +1784,23 @@ export function mountParty(root: HTMLElement, hooks: PartyHooks): PartyView {
       "aria-label": "Its name",
     }) as HTMLInputElement;
     const purse = purseSelect(pc);
-    const get = (buying: boolean): void =>
+    const get = (buying: boolean): void => {
+      const t = list.find((x) => x.name === pick.value);
+      const name = named.value.trim() || undefined;
+      if (buying)
+        return buyFrom(
+          (purse?.value as Purse | undefined) ?? payOf(pc),
+          (m, from) => {
+            if (!t) throw new Error("Choose an animal or vehicle.");
+            return buyCarrier(m, t, { name, purse: from }).line;
+          },
+          "add-carrier",
+        );
       act(() => {
-        const t = list.find((x) => x.name === pick.value);
         if (!t) throw new Error("Choose an animal or vehicle.");
-        const name = named.value.trim() || undefined;
-        if (buying)
-          return buyCarrier(pc, t, { name, purse: (purse?.value as Purse) ?? "coins" }).line;
-        const c = addCarrier(pc, t, name);
-        return `${pc.name} +${carrierText(c)}, not paid for`;
+        return `${pc.name} +${carrierText(addCarrier(pc, t, name))}, not paid for`;
       });
+    };
     const f = list.length
       ? form(
           () => get(true),
@@ -2354,20 +2476,6 @@ function transportPrice(t: Transport): string {
   return p ? priceText(p) : "no price";
 }
 
-/** The purse to pay from, when the member has banked coins to choose. */
-function purseSelect(pc: PC): HTMLSelectElement | null {
-  if (worthCp(pc.banked) === 0) return null;
-  const el = select(
-    [
-      ["coins", "pay from carried"],
-      ["banked", "pay from banked"],
-    ],
-    "coins",
-  );
-  el.setAttribute("aria-label", "Pay from");
-  return el;
-}
-
 /** Where a dragged item would go, and the row that shows it. */
 interface Drop {
   el: HTMLElement;
@@ -2413,6 +2521,35 @@ function markDrop(t: Drop | null, shown: boolean): void {
 }
 
 /** "LAND CARTS" → "Land carts". */
+/** The button of a message's offer (`Message.offer`). */
+function offerButton(o: Offer): HTMLElement {
+  return button(o.label, o.run, "btn mini accent offer");
+}
+
+const PAY_KEY = "dlmnwd:pay-from";
+
+/** The purse each member pays from, by name, as kept in this browser. */
+function readPayFrom(): Record<string, Purse> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PAY_KEY) ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(raw).filter(
+        (e): e is [string, Purse] => e[1] === "banked" || e[1] === "coins",
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function storePayFrom(pay: Record<string, Purse>): void {
+  try {
+    localStorage.setItem(PAY_KEY, JSON.stringify(pay));
+  } catch {
+    // Private mode or full storage: the choice lasts until the page closes.
+  }
+}
+
 /** A gear row's or an animal's key in the set of those open for editing. */
 const editKey = (pc: PC, id: string): string => `${pc.name}\n${id}`;
 

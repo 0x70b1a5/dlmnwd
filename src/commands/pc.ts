@@ -10,6 +10,8 @@ import {
   learnName,
   moveCoins,
   setField,
+  ShortOfCoins,
+  worthCp,
 } from "../party/actions.ts";
 import { describeLoad, type Load } from "../party/encumbrance.ts";
 import {
@@ -70,7 +72,7 @@ function animalCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args
       const label = flag(args, "--name");
       const line =
         sub === "buy" || args.includes("--buy")
-          ? buyCarrier(pc, t, { name: label, purse }).line
+          ? orBank(pc, purse, () => buyCarrier(pc, t, { name: label, purse }).line)
           : `${pc.name} +${carrierText(addCarrier(pc, t, label))}, not paid for`;
       saveParty(party);
       console.log(line);
@@ -246,12 +248,16 @@ export function cmdPc(args: string[]): void {
       if (!text) throw new Error("usage: dw pc <name> buy <item> [qty] [--banked]");
       const t = rules.transport.find((x) => x.name.toLowerCase() === text.toLowerCase());
       if (t && !resolveItem(rules.catalog, text).item) {
-        const { line } = buyCarrier(pc, t, { purse, name: flag(args, "--name") });
+        const line = orBank(
+          pc,
+          purse,
+          () => buyCarrier(pc, t, { purse, name: flag(args, "--name") }).line,
+        );
         save();
         console.log(line);
         return;
       }
-      const { line } = buyItem(pc, rules, text, { qty: n, purse });
+      const line = orBank(pc, purse, () => buyItem(pc, rules, text, { qty: n, purse }).line);
       save();
       console.log(line);
       console.log(`  ${formatCoins(pc.coins)} carried; ${formatCoins(pc.banked)} banked`);
@@ -701,5 +707,17 @@ function runeCmd(pc: PC, party: Party, rules: PartyRules, rest: string[], args: 
     }
     default:
       throw new Error(`Unknown rune command "${op}" (add, rm, use, learn).`);
+  }
+}
+
+/** Buy with the coins carried. When they are short and the bank holds enough,
+ *  the error says how to pay from the bank. */
+function orBank(pc: PC, purse: Purse, buy: () => string): string {
+  try {
+    return buy();
+  } catch (err) {
+    if (err instanceof ShortOfCoins && purse === "coins" && worthCp(pc.banked) >= err.cp)
+      throw new Error(`${err.message} The bank holds enough: add --banked.`, { cause: err });
+    throw err;
   }
 }

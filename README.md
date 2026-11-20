@@ -234,7 +234,9 @@ follow later changes. The gear is listed by where it is: equipped, stowed, on ea
 vehicle, and stashed. Drag a row by its grip to reorder it, drop it on a
 container to put it inside, or drop it on a heading to move it there. The
 pencil on a row opens its edit line: where the item is, and Remove. Coins can be added, spent, banked and
-withdrawn, and Buy pays the book's price. The selected member shows
+withdrawn, and Buy pays the book's price from the purse you chose (kept for
+each member). When the coins carried are short and the bank holds enough, the
+error offers to pay from the bank. The selected member shows
 with the most used parts first. A strip with the name, HP, AC, attack, speed and
 saves stays in view while you scroll. Below it are the abilities, XP and gold,
 then spells, glamours, knacks and runes, then gear, coins and notes. Each

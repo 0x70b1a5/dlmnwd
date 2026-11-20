@@ -89,6 +89,16 @@ export function coinsFor(cp: number): Coins {
   return out;
 }
 
+/** A purse holds less than a price. `cp` is the price, in copper. */
+export class ShortOfCoins extends Error {
+  readonly cp: number;
+  constructor(message: string, cp: number) {
+    super(message);
+    this.name = "ShortOfCoins";
+    this.cp = cp;
+  }
+}
+
 /**
  * Pay a price in copper from a purse. The smallest coins go first; when they
  * don't make the price exactly, the smallest coin that covers the rest is
@@ -102,8 +112,9 @@ export function payCoins(
 ): { paid: Coins; change: Coins } {
   const have = worthCp(purse);
   if (have < cp)
-    throw new Error(
+    throw new ShortOfCoins(
       `That costs ${cpText(cp)}; ${who} hold${who.endsWith("s") ? "" : "s"} ${cpText(have)}.`,
+      cp,
     );
   const paid = emptyCoins();
   let rest = cp;

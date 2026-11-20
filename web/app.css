@@ -2415,12 +2415,15 @@ body.dragging * {
 }
 .party .carriers .cline {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.15rem 0.6rem;
+  gap: 0.6rem;
+}
+.party .carriers .cwho {
+  flex: 1;
+  min-width: 0;
 }
 .party .carriers .cline .iedit {
-  margin-left: auto;
+  flex: none;
 }
 .party .carriers .imeta {
   padding-left: 0;
@@ -2711,5 +2714,41 @@ a.theme-toggle {
     .party .gear col.c-x {
       width: 4.3rem;
     }
+  }
+}
+
+/* A message's offer: another way to make the change that failed. */
+.status .offer {
+  margin-left: 0.5rem;
+  text-transform: none;
+  vertical-align: baseline;
+}
+/* The last error in the sticky strip: only on a narrow screen, where the
+   status line at the top is out of view once the page scrolls. */
+.play-strip .strip-note {
+  display: none;
+}
+@container sheet (max-width: 560px) {
+  .party-notes .in-strip {
+    display: none;
+  }
+  .play-strip .strip-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.5rem;
+    flex-basis: 100%;
+    text-transform: none;
+  }
+  .play-strip .strip-note > span {
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+  .play-strip .strip-note .offer {
+    margin-left: 0;
+  }
+  /* The dismiss button is the strip's only cross. */
+  .play-strip .strip-note::before {
+    content: none;
   }
 }

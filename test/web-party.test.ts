@@ -46,10 +46,11 @@ let notes: string[];
 beforeAll(() => GlobalRegistrator.register());
 afterAll(() => GlobalRegistrator.unregister());
 
-/** Mount the tab on a saved party of one member. */
-async function mount(member: object): Promise<void> {
+/** Mount the tab on a saved party of one member, and any other stored keys. */
+async function mount(member: object, keys: Record<string, string> = {}): Promise<void> {
   localStorage.clear();
   localStorage.setItem(KEY, JSON.stringify({ members: [member] }));
+  for (const [k, v] of Object.entries(keys)) localStorage.setItem(k, v);
   const { mountParty } = await import("../web/party.ts");
   const { memberSheet } = await import("../web/member-sheet.ts");
   document.body.innerHTML = '<div id="party"></div>';
@@ -277,4 +278,63 @@ test("coins are added, banked and withdrawn from the amounts given", async () =>
   press("Move these from the bank to the coins carried");
   expect(stored().banked.gp).toBe(20);
   expect(root.textContent).toContain("Only 20gp in the bank");
+});
+
+const saver = {
+  ...packer,
+  coins: { pp: 0, gp: 1, sp: 0, cp: 0 },
+  banked: { pp: 0, gp: 10, sp: 0, cp: 0 },
+};
+const buyKnapsack = (): void => {
+  (byLabel("Item to add") as HTMLInputElement).value = "Knapsack";
+  byLabel("Buy it at the book's price").click();
+};
+
+test("the purse to pay from is kept, in this browser, for each member", async () => {
+  await mount(saver);
+  view.setRules(packRules);
+  expect((byLabel("Pay from") as HTMLSelectElement).value).toBe("coins");
+  await choose("Pay from", "banked");
+  expect(JSON.parse(localStorage.getItem("dlmnwd:pay-from")!)).toEqual({ "Orla Venn": "banked" });
+  buyKnapsack();
+  expect(stored().banked.gp).toBe(7);
+  // Still the bank after the buy, and the item field is empty again.
+  expect((byLabel("Pay from") as HTMLSelectElement).value).toBe("banked");
+  expect((byLabel("Item to add") as HTMLInputElement).value).toBe("");
+  // A new page reads it back.
+  await mount(stored(), { "dlmnwd:pay-from": localStorage.getItem("dlmnwd:pay-from")! });
+  view.setRules(packRules);
+  expect((byLabel("Pay from") as HTMLSelectElement).value).toBe("banked");
+});
+
+test("too few coins carried: the error offers the bank when it holds enough", async () => {
+  await mount(saver);
+  view.setRules(packRules);
+  buyKnapsack();
+  expect(stored().items.find((i: { name: string }) => i.name === "Knapsack").qty).toBe(1);
+  const offer = byLabel("Pay 3gp from the bank");
+  expect(offer).toBeDefined();
+  // The strip carries the error too, for a narrow screen.
+  const strip = root.querySelector(".play-strip .strip-note")!;
+  expect(strip.textContent).toContain("That costs 3gp");
+  expect(strip.querySelector(".offer")?.textContent).toBe("Pay 3gp from the bank");
+  expect(root.querySelector(".party-notes .in-strip")).not.toBeNull();
+  offer.click();
+  const knapsack = () => stored().items.find((i: { name: string }) => i.name === "Knapsack");
+  expect(knapsack().qty).toBe(2);
+  expect(stored().banked.gp).toBe(7);
+  expect(stored().coins.gp).toBe(1);
+  expect(root.querySelector(".strip-note")).toBeNull();
+  expect((byLabel("Item to add") as HTMLInputElement).value).toBe("");
+});
+
+test("no offer when the bank is short too; the strip's error can be dismissed", async () => {
+  await mount({ ...saver, banked: { pp: 0, gp: 2, sp: 0, cp: 0 } });
+  view.setRules(packRules);
+  buyKnapsack();
+  expect(root.querySelector(".offer")).toBeNull();
+  expect(root.querySelector(".strip-note")).not.toBeNull();
+  byLabel("Dismiss the error").click();
+  expect(root.querySelector(".strip-note")).toBeNull();
+  expect(root.querySelector(".party-notes")!.textContent).not.toContain("That costs");
 });
